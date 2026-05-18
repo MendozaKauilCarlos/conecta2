@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Storage for user personal and academic information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "controlNumber": { "type": "string" },
+        "career": { "type": "string" },
+        "semester": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "student"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Template": {
+      "title": "Document Template",
+      "description": "Definition of a document format (e.g., Anexo 17)",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string" },
+        "fields": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Submission": {
+      "title": "Document Submission",
+      "description": "A user's filled document",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "templateId": { "type": "string" },
+        "data": { "type": "object" },
+        "status": { "type": "string", "enum": ["draft", "pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/templates/{templateId}": {
+      "schema": "Template",
+      "description": "Shared document templates"
+    },
+    "/submissions/{submissionId}": {
+      "schema": "Submission",
+      "description": "User document submissions"
+    }
+  }
+}

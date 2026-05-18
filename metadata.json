@@ -1,5 +1,6 @@
 {
   "name": "Conecta2",
   "description": "Portal de alumnos para la gestión y seguimiento del servicio social Conecta2.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

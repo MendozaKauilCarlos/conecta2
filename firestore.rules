@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // --- Global Safety Net ---
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- User Profiles ---
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow create, update: if isOwner(userId) && 
+        request.resource.data.keys().hasAll(['name', 'email', 'role']) &&
+        request.resource.data.role in ['student', 'admin'];
+    }
+
+    // --- Templates ---
+    match /templates/{templateId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Only manageable via Firebase Console or Admin SDK for now
+    }
+
+    // --- Submissions ---
+    match /submissions/{submissionId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && 
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.createdAt == request.time;
+      allow update: if isSignedIn() && 
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.status in ['draft', 'pending'] &&
+        request.resource.data.updatedAt == request.time;
+    }
+  }
+}
