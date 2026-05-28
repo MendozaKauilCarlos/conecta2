@@ -2,27 +2,40 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Search, Plus, GraduationCap, Building2, HeartPulse, Users, Gavel, X } from 'lucide-react';
-import { Dependency } from '../../types';
-import { DEPENDENCIES } from '../../constants';
+import { Dependency, UserData } from '../../types';
+import * as dbService from '../../services/dbService';
 import { DependencyCard } from './DependencyCard';
 import { DependencyDetailsModal } from './DependencyDetailsModal';
 
 export function CatalogView({ 
+  user,
   onSelectDependency,
   isDarkMode 
 }: { 
+  user: UserData,
   onSelectDependency: (dep: Dependency) => void,
   isDarkMode?: boolean
 }) {
   const [filter, setFilter] = useState('Todos');
   const [searchQuery, setSearchQuery] = useState('');
+  const [dependencies, setDependencies] = useState<Dependency[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDependencyModal, setSelectedDependencyModal] = useState<Dependency | null>(null);
   const [showNewAgreementNotice, setShowNewAgreementNotice] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 1000);
-    return () => clearTimeout(timer);
+    const fetchDeps = async () => {
+      setIsLoading(true);
+      try {
+        const data = await dbService.getDependencies();
+        setDependencies(data);
+      } catch (err) {
+        console.error("Error fetching dependencies: ", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchDeps();
   }, []);
 
   const categories = [
@@ -35,13 +48,13 @@ export function CatalogView({
   ];
 
   const filteredDependencies = useMemo(() => {
-    return DEPENDENCIES.filter(d => {
+    return dependencies.filter(d => {
       const matchesFilter = filter === 'Todos' || d.category === filter;
       const matchesSearch = d.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                            d.subCategory.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesFilter && matchesSearch;
     });
-  }, [filter, searchQuery]);
+  }, [dependencies, filter, searchQuery]);
 
   return (
     <div className="space-y-8">
@@ -139,6 +152,7 @@ export function CatalogView({
         {selectedDependencyModal && (
           <DependencyDetailsModal 
             dependency={selectedDependencyModal} 
+            user={user}
             onClose={() => setSelectedDependencyModal(null)} 
             onSelect={() => onSelectDependency(selectedDependencyModal)}
             isDarkMode={isDarkMode}

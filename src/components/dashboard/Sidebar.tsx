@@ -126,38 +126,6 @@ export function Sidebar({
           <ThemeToggle isDarkMode={isDarkMode} onToggle={onToggleDarkMode} />
         </div>
 
-        {/* Firebase Sync Indicator */}
-        {user.role !== 'admin' && (
-          <div className={`mb-10 p-5 rounded-[1.5rem] border transition-all ${isDarkMode ? 'bg-white/5 border-neutral-800' : 'bg-neutral-50 border-neutral-100'}`}>
-            {firebaseLoading ? (
-               <div className="flex items-center gap-3">
-                 <Loader2 size={14} className="text-brand-teal animate-spin" />
-                 <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Verificando Nube...</span>
-               </div>
-            ) : firebaseUser ? (
-               <div className="space-y-4">
-                 <div className="flex items-center justify-between">
-                   <div className="flex items-center gap-2">
-                     <div className="w-2 h-2 rounded-full bg-brand-teal animate-pulse" />
-                     <span className="text-[9px] font-black uppercase tracking-widest text-brand-teal">Sincronizado</span>
-                   </div>
-                   <button onClick={handleFirebaseLogout} className="p-1.5 hover:bg-neutral-200 dark:hover:bg-white/10 rounded-lg transition-all text-neutral-400">
-                     <LogOut size={12} />
-                   </button>
-                 </div>
-                 <div className="truncate">
-                   <p className="text-[10px] font-bold text-neutral-500 truncate">{firebaseUser.email}</p>
-                 </div>
-               </div>
-            ) : (
-               <div className="flex items-center gap-3">
-                 <Info size={14} className="text-neutral-400" />
-                 <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Sin Conexión Nube</span>
-               </div>
-            )}
-          </div>
-        )}
-
         <div className="flex-1 space-y-10">
           <div>
             <h3 className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-6 ${isDarkMode ? 'text-neutral-700' : 'text-neutral-400'}`}>Menú Principal</h3>
@@ -192,7 +160,7 @@ export function Sidebar({
                     icon={<Building2 size={20} />} 
                     label="Catálogo de Plazas" 
                     active={activeTab === 'Catalog'} 
-                    locked={user.role === 'student' && !dataConfirmed}
+                    locked={false}
                     onClick={() => onTabChange('Catalog')}
                     isDarkMode={isDarkMode}
                   />
@@ -200,7 +168,7 @@ export function Sidebar({
                     icon={<FileEdit size={20} />} 
                     label="Mis Documentos" 
                     active={activeTab === 'Docs'} 
-                    locked={!selectedDependency || (user.role === 'student' && !dataConfirmed)}
+                    locked={false}
                     onClick={() => onTabChange('Docs')}
                     isDarkMode={isDarkMode}
                   />
@@ -227,7 +195,7 @@ export function Sidebar({
           </div>
           
           <button 
-            onClick={onLogout}
+            onClick={handleFirebaseLogout}
             className="flex items-center gap-3 text-rose-600 hover:text-rose-700 transition-colors text-sm font-bold group w-full text-left"
           >
             <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />

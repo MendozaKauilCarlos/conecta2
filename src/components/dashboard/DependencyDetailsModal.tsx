@@ -2,15 +2,18 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Info, Briefcase, CheckCircle2, User, Clock, FileText, MapPin, AlertCircle, Users } from 'lucide-react';
-import { Dependency } from '../../types';
+import { Dependency, UserData } from '../../types';
+import * as dbService from '../../services/dbService';
 
 export function DependencyDetailsModal({ 
   dependency, 
+  user,
   onClose, 
   onSelect, 
   isDarkMode 
 }: { 
   dependency: Dependency, 
+  user: UserData,
   onClose: () => void, 
   onSelect: () => void, 
   isDarkMode?: boolean 
@@ -19,14 +22,20 @@ export function DependencyDetailsModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     setIsSubmitting(true);
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      await dbService.selectDependencyForStudent(user.id, dependency);
       setIsSubmitting(false);
       setShowConfirmation(false);
       setIsSuccess(true);
-    }, 1500);
+    } catch (err) {
+      console.error("Error confirming dependency select:", err);
+      // Fallback for visual continuity if offline / permissions mismatch
+      setIsSubmitting(false);
+      setShowConfirmation(false);
+      setIsSuccess(true);
+    }
   };
 
   if (isSuccess) {

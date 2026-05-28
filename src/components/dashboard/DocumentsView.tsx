@@ -4,6 +4,8 @@ import { motion } from 'motion/react';
 import { UserData } from '../../types';
 import { FileEdit, FileText, CheckCircle2, Clock, AlertCircle, PenLine, ShieldCheck, Eye, Upload } from 'lucide-react';
 import { DocumentDetailView } from './DocumentDetailView';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 
 interface DocumentCardProps {
   doc: {
@@ -64,10 +66,16 @@ function DocumentCard({ doc, isDarkMode, onClick }: DocumentCardProps) {
   };
 
   const status = getStatusConfig(doc.status);
-  const isActionable = ['RECHAZADO', 'BORRADOR', 'PENDIENTE'].includes(doc.status);
+  const isActionable = ['RECHAZADO', 'PENDIENTE'].includes(doc.status);
   const title = doc.title.toLowerCase();
   const isUploadType = ['7', '8', '9'].includes(doc.id) || title.includes('kardex') || title.includes('carga') || title.includes('vigencia');
-  const isGenerateType = doc.id === '10' || title.includes('solicitud');
+  const isGenerateType = ['10', '11', '12', '13', '14'].includes(doc.id) || 
+                         title.includes('solicitud') || 
+                         title.includes('compromiso') || 
+                         title.includes('asignacion') || 
+                         title.includes('asignación') || 
+                         title.includes('plan de trabajo') || 
+                         title.includes('tarjeta');
 
   return (
     <motion.div 
@@ -156,43 +164,177 @@ function DocumentCard({ doc, isDarkMode, onClick }: DocumentCardProps) {
 
 export function DocumentsView({ user, isDarkMode }: { user: UserData, isDarkMode?: boolean }) {
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
-  
+  const [dbStudentData, setDbStudentData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user || !user.id) {
+      setLoading(false);
+      return;
+    }
+    
+    const docRef = doc(db, "alumnos_tecnologico", user.id);
+    const unsubscribe = onSnapshot(docRef, (snap) => {
+      if (snap.exists()) {
+        setDbStudentData(snap.data());
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error("Error loading documents in realtime:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const formatFirebaseDate = (timestamp: any) => {
+    if (!timestamp) return null;
+    let d: Date;
+    if (timestamp.toDate) {
+      d = timestamp.toDate();
+    } else if (timestamp.seconds) {
+      d = new Date(timestamp.seconds * 1000);
+    } else if (timestamp instanceof Date) {
+      d = timestamp;
+    } else if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+      d = new Date(timestamp);
+    } else {
+      return null;
+    }
+    
+    if (isNaN(d.getTime())) return null;
+    
+    const day = d.getDate();
+    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    const hrs = String(d.getHours()).padStart(2, '0');
+    const mins = String(d.getMinutes()).padStart(2, '0');
+    return `${day} ${month} ${year} ${hrs}:${mins}`;
+  };
+
+  const getDocStatusAndDetails = (key: string) => {
+    const docMap = dbStudentData?.[key] || {};
+    const url = docMap.url_documento || '';
+    const valid = docMap.estado_validacion === true;
+    const obs = docMap.observaciones || '';
+    const dateStr = formatFirebaseDate(docMap.fecha_subida);
+    
+    let status = 'PENDIENTE';
+    if (url) {
+      if (valid) {
+        status = 'APROBADO';
+      } else if (obs && obs.trim() !== '' && obs.trim() !== '""' && obs.trim() !== '" "') {
+        status = 'RECHAZADO';
+      } else {
+        status = 'EN REVISIÓN';
+      }
+    }
+    
+    return {
+      status,
+      lastModified: dateStr,
+      url,
+      observaciones: obs,
+    };
+  };
+
+  const kardexDetails = getDocStatusAndDetails('kardex');
+  const cargaDetails = getDocStatusAndDetails('carga_academica');
+  const vigenciaDetails = getDocStatusAndDetails('vigencia_derechos');
+  const anexo17Details = getDocStatusAndDetails('solicitud_servicio_social');
+  const compromisoDetails = getDocStatusAndDetails('carta_compromiso');
+  const asignacionDetails = getDocStatusAndDetails('carta_asignacion');
+  const planTrabajoDetails = getDocStatusAndDetails('plan_de_trabajo');
+  const tarjetaControlDetails = getDocStatusAndDetails('tarjeta_control');
+
+  let anexo17Status = 'PENDIENTE';
+  if (anexo17Details.url) {
+    anexo17Status = anexo17Details.status;
+  }
+
   const documents = [
     {
       id: '10',
-      title: 'Anexo 17: Solicitud de Servicio Social',
+      title: 'Solicitud de Servicio Social',
       description: 'Formato oficial para iniciar el proceso de asignación de servicio social.',
-      status: 'BORRADOR',
-      lastModified: 'Hoy',
+      status: anexo17Status,
+      lastModified: anexo17Details.lastModified,
+      url: anexo17Details.url,
+      observaciones: anexo17Details.observaciones,
+    },
+    {
+      id: '11',
+      title: 'Carta Compromiso',
+      description: 'Acuerdo oficial en donde el alumno se compromete a cumplir con los lineamientos del Servicio Social.',
+      status: compromisoDetails.status,
+      lastModified: compromisoDetails.lastModified,
+      url: compromisoDetails.url,
+      observaciones: compromisoDetails.observaciones,
+    },
+    {
+      id: '12',
+      title: 'Carta Asignación',
+      description: 'Oficio oficial que formaliza tu vinculación activa con la dependencia receptora.',
+      status: asignacionDetails.status,
+      lastModified: asignacionDetails.lastModified,
+      url: asignacionDetails.url,
+      observaciones: asignacionDetails.observaciones,
+    },
+    {
+      id: '13',
+      title: 'Plan de Trabajo',
+      description: 'Esquema calendarizado de actividades a realizar coordinado con tu asesor externo.',
+      status: planTrabajoDetails.status,
+      lastModified: planTrabajoDetails.lastModified,
+      url: planTrabajoDetails.url,
+      observaciones: planTrabajoDetails.observaciones,
+    },
+    {
+      id: '14',
+      title: 'Tarjeta de Control',
+      description: 'Tarjeta para recabar firmas del registro de tus actividades y horas acumuladas.',
+      status: tarjetaControlDetails.status,
+      lastModified: tarjetaControlDetails.lastModified,
+      url: tarjetaControlDetails.url,
+      observaciones: tarjetaControlDetails.observaciones,
     },
     {
       id: '7',
       title: 'Kardex Académico',
       description: 'Historial académico oficial para validar porcentaje de avance.',
-      status: 'RECHAZADO',
-      lastModified: '12 May 2026',
+      status: kardexDetails.status,
+      lastModified: kardexDetails.lastModified,
+      url: kardexDetails.url,
+      observaciones: kardexDetails.observaciones,
     },
     {
       id: '8',
       title: 'Carga Académica',
       description: 'Documento que acredita las materias cursadas en el ciclo actual.',
-      status: 'PENDIENTE',
-      lastModified: null,
+      status: cargaDetails.status,
+      lastModified: cargaDetails.lastModified,
+      url: cargaDetails.url,
+      observaciones: cargaDetails.observaciones,
     },
     {
       id: '9',
       title: 'Vigencia de Derechos',
       description: 'Constancia oficial del IMSS para acreditar seguridad social activa.',
-      status: 'PENDIENTE',
-      lastModified: null,
+      status: vigenciaDetails.status,
+      lastModified: vigenciaDetails.lastModified,
+      url: vigenciaDetails.url,
+      observaciones: vigenciaDetails.observaciones,
     },
   ];
 
   if (selectedDoc) {
+    const liveDoc = documents.find(d => d.id === selectedDoc.id) || selectedDoc;
     return (
       <DocumentDetailView 
-        doc={selectedDoc} 
+        doc={liveDoc} 
         user={user}
+        dbStudentData={dbStudentData}
         onBack={() => {
           setSelectedDoc(null);
         }} 
@@ -210,31 +352,24 @@ export function DocumentsView({ user, isDarkMode }: { user: UserData, isDarkMode
             Gestiona tu expediente de servicio social y realiza el seguimiento de tus trámites en tiempo real.
           </p>
         </div>
-        <div className={`p-8 rounded-[2.5rem] border flex items-center gap-8 transition-all shrink-0 ${isDarkMode ? 'bg-white/5 border-neutral-800' : 'bg-white border-neutral-100 shadow-xl shadow-blue-900/5'}`}>
-          <div className="shrink-0 relative">
-            <svg className="w-16 h-16 transform -rotate-90">
-              <circle cx="32" cy="32" r="28" className={`fill-none stroke-[6] transition-all duration-1000 ${isDarkMode ? 'stroke-neutral-800' : 'stroke-neutral-100'}`} />
-              <circle cx="32" cy="32" r="28" className="fill-none stroke-[6] stroke-brand-teal stroke-dash-100" style={{ strokeDashoffset: 176 * (1 - 0.33) }} strokeLinecap="round" />
-            </svg>
-            <div className={`absolute inset-0 flex items-center justify-center font-black text-sm ${isDarkMode ? 'text-brand-teal' : 'text-brand-teal'}`}>33%</div>
-          </div>
-          <div className="space-y-1">
-            <span className={`block text-[10px] font-black uppercase tracking-[0.2em] ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Integridad del Expediente</span>
-            <div className={`text-xl font-black leading-none ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>Nivel Bronce</div>
-          </div>
-        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 sm:gap-10">
-        {documents.map((doc) => (
-          <DocumentCard 
-            key={doc.id}
-            doc={doc} 
-            isDarkMode={isDarkMode} 
-            onClick={() => setSelectedDoc(doc)}
-          />
-        ))}
-      </div>
+      {loading ? (
+        <div className="flex items-center justify-center p-12">
+          <span className="text-sm font-bold text-neutral-400">Cargando expediente...</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 sm:gap-10">
+          {documents.map((doc) => (
+            <DocumentCard 
+              key={doc.id}
+              doc={doc} 
+              isDarkMode={isDarkMode} 
+              onClick={() => setSelectedDoc(doc)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -7,8 +7,28 @@ import { UserData } from '../types';
 import { MOCK_USERS } from '../constants';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth as firebaseAuth, db } from '../lib/firebase';
-import { getDoc, doc } from 'firebase/firestore';
+import { getDoc, doc, query, collection, where, getDocs } from 'firebase/firestore';
 import * as dbService from '../services/dbService';
+
+function formatFirebaseDate(val: any): string {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  if (val instanceof Date) {
+    return val.toISOString().substring(0, 10);
+  }
+  if (val && typeof val.toDate === "function") {
+    try {
+      return val.toDate().toISOString().substring(0, 10);
+    } catch (e) {}
+  }
+  if (val && typeof val.seconds === "number") {
+    try {
+      const d = new Date(val.seconds * 1000);
+      return d.toISOString().substring(0, 10);
+    } catch (e) {}
+  }
+  return String(val);
+}
 
 export function LoginPage({ 
   onLogin, 
@@ -42,8 +62,9 @@ export function LoginPage({
 
     setIsLoggingIn(true);
     
-    // Bypass for demo/testing
-    if (email === 'admin' || password === 'admin') {
+    // Bypass for demo/testing with original mock credentials
+    const cleanEmail = email.trim();
+    if (cleanEmail === 'admin' && password === 'admin') {
       setTimeout(() => {
         onLogin(MOCK_USERS.admin);
         setIsLoggingIn(false);
@@ -51,7 +72,7 @@ export function LoginPage({
       return;
     }
 
-    if (email === '19530001' || password === '19530001') {
+    if (cleanEmail === '19530001' && password === '19530001') {
       setTimeout(() => {
         onLogin(MOCK_USERS.student2);
         setIsLoggingIn(false);
@@ -59,44 +80,228 @@ export function LoginPage({
       return;
     }
     
+    // For general connections, if it's a numeric control number or plain username without "@", we append the institutional domain.
+    let loginEmail = cleanEmail;
+    if (!loginEmail.includes('@')) {
+      if (/^\d+$/.test(loginEmail)) {
+        // Purely numeric matricula, we prepend 'l' as the standard TecNM Cancún student email prefix (e.g. l21530321@cancun.tecnm.mx)
+        loginEmail = `l${loginEmail}@cancun.tecnm.mx`;
+      } else if (/^[lL]\d+$/.test(loginEmail)) {
+        // Standard user typing e.g. L21530321 or l21530321, ensure lowercase prefix
+        loginEmail = `l${loginEmail.substring(1)}@cancun.tecnm.mx`;
+      } else {
+        loginEmail = `${loginEmail}@cancun.tecnm.mx`;
+      }
+    }
+    
     try {
-      const userCredential = await signInWithEmailAndPassword(firebaseAuth, email, password);
+      const userCredential = await signInWithEmailAndPassword(firebaseAuth, loginEmail, password);
       const firebaseUser = userCredential.user;
 
-      const userSnap = await getDoc(doc(db, "users", firebaseUser.uid));
+      // Check if this is the admin institutional email
+      const isInstitutionalAdmin = firebaseUser.email?.toLowerCase().trim() === 'ss_vinculacion@cancun.tecnm.mx';
+      if (isInstitutionalAdmin) {
+        onLogin({
+          id: firebaseUser.uid,
+          name: firebaseUser.displayName || 'Vincular Conecta2 Admin',
+          role: 'admin',
+          email: firebaseUser.email || 'ss_vinculacion@cancun.tecnm.mx',
+          profilePicture: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150&h=150'
+        });
+        setIsLoggingIn(false);
+        return;
+      }
+
+      // Try to find the user in Firestore through multiple possible strategies (UID, alumnos_tecnologico, control number/username, email as ID, query)
+      let userData: any = null;
       
-      if (userSnap.exists()) {
-        const data = userSnap.data();
-        onLogin({
-          ...MOCK_USERS.student2,
-          id: firebaseUser.uid,
-          name: data.name || firebaseUser.displayName || 'Estudiante',
-          role: data.role || 'student',
-          email: firebaseUser.email || undefined,
-          ...data
-        });
-      } else {
-        onLogin({
-          ...MOCK_USERS.student2,
-          id: firebaseUser.uid,
-          name: firebaseUser.displayName || 'Estudiante',
-          email: firebaseUser.email || undefined,
-          controlNumber: 'TEMP-' + firebaseUser.uid.substring(0, 5),
-          career: 'POR DEFINIR',
-        });
+      // 1. Check in alumnos_tecnologico collection by UID (primary live DB path)
+      const alumRef = doc(db, "alumnos_tecnologico", firebaseUser.uid);
+      const alumSnap = await getDoc(alumRef);
+      if (alumSnap.exists()) {
+        const alumData = alumSnap.data();
+        if (alumData && alumData.datos) {
+          const d = alumData.datos;
+          const statusAcad = alumData.status_academico || {};
+          const dom = alumData.domicilio || {};
+          
+          const firstName = d.nombre || "";
+          const p = d.apellido_paterno || "";
+          const m = d.apellido_materno || "";
+          const fullName = `${firstName} ${p} ${m}`.trim().replace(/\s+/g, " ") || firebaseUser.displayName || 'Estudiante';
+          
+          const aprobados = typeof statusAcad.creditos_aprobados === 'number' ? statusAcad.creditos_aprobados : 0;
+          const totalCarrera = typeof statusAcad.creditos_total_carrera === 'number' ? statusAcad.creditos_total_carrera : 0;
+          
+          let computedProgress = 65;
+          if (totalCarrera > 0) {
+            computedProgress = Math.round((aprobados / totalCarrera) * 100);
+          } else if (typeof statusAcad.porcentaje_avance === 'number') {
+            computedProgress = statusAcad.porcentaje_avance;
+          } else if (typeof d.porcentaje_avance === 'number') {
+            computedProgress = d.porcentaje_avance;
+          }
+          
+          let compCredits = 3;
+          if (typeof statusAcad.creditos_complemnetarios === 'number') {
+            compCredits = statusAcad.creditos_complemnetarios;
+          } else if (typeof statusAcad.creditos_complementarios === 'number') {
+            compCredits = statusAcad.creditos_complementarios;
+          } else if (typeof d.creditos_complementarios === 'number') {
+            compCredits = d.creditos_complementarios;
+          }
+          
+          const semVal = typeof statusAcad.semestre === 'number' ? `${statusAcad.semestre}º Semestre` : (d.semestre || '8vo Semestre');
+          
+          // Assess candidate apt_status dynamically based on 70% progress & 5 complementary credits values from real DB
+          const meetsAcad = computedProgress >= 70 && compCredits >= 5;
+          const aptoVal = meetsAcad;
+          
+          if (alumData.apto !== aptoVal) {
+            try {
+              const { updateDoc } = await import('firebase/firestore');
+              await updateDoc(alumRef, { apto: aptoVal });
+            } catch (err) {
+              console.error("Error updating apto field in Firestore on login: ", err);
+            }
+          }
+          
+          userData = {
+            id: firebaseUser.uid,
+            name: fullName,
+            role: 'student',
+            controlNumber: d.no_control || cleanEmail || '',
+            email: d.correo_institucional || d.correo || firebaseUser.email || undefined,
+            birthDate: formatFirebaseDate(d.fecha_nacimiento) || undefined,
+            profilePicture: d.foto || undefined,
+            career: statusAcad.carrera || d.carrera || 'INGENIERÍA EN SISTEMAS COMPUTACIONALES',
+            apto: aptoVal,
+            id_dependencia: alumData.id_dependencia || "",
+            dependencia_seleccionada: alumData.dependencia_seleccionada || "",
+            academicStats: {
+              careerProgress: computedProgress,
+              complementaryCredits: compCredits
+            },
+            address: {
+              street: dom.calle || d.direccion_calle || 'Calle Majahua',
+              neighborhood: dom.colonia || d.direccion_colonia || 'Prado Norte',
+              city: dom.ciudad || d.direccion_ciudad || 'Cancún',
+              state: dom.estado || d.direccion_estado || 'Quintana Roo',
+              zipCode: dom.cp || d.direccion_cp || '77539'
+            },
+            gender: d.sexo || d.genero || 'Masculino',
+            phone: d.telefono || d.celular || '(998) 123-4567',
+            semester: semVal,
+            nss: d.nss || '12345678901'
+          };
+        }
+      }
+      
+      if (!userData) {
+        // 2. Check document by Firebase UID in users
+        const uidRef = doc(db, "users", firebaseUser.uid);
+        const uidSnap = await getDoc(uidRef);
+        if (uidSnap.exists()) {
+          userData = uidSnap.data();
+        } else {
+          // 3. Check document by Username / Control Number (e.g. 19530001)
+          const controlNumberRef = doc(db, "users", cleanEmail);
+          const controlNumberSnap = await getDoc(controlNumberRef);
+          if (controlNumberSnap.exists()) {
+            userData = controlNumberSnap.data();
+          } else {
+            // 4. Check document by full Email (e.g. 19530001@cancun.tecnm.mx)
+            const emailRef = doc(db, "users", loginEmail);
+            const emailSnap = await getDoc(emailRef);
+            if (emailSnap.exists()) {
+              userData = emailSnap.data();
+            } else {
+              // 5. Query collection by email field
+              const qEmail = query(collection(db, "users"), where("email", "==", loginEmail));
+              const queryEmailSnap = await getDocs(qEmail);
+              if (!queryEmailSnap.empty) {
+                userData = queryEmailSnap.docs[0].data();
+              } else {
+                // 6. Query collection by controlNumber field
+                const qControl = query(collection(db, "users"), where("controlNumber", "==", cleanEmail));
+                const queryControlSnap = await getDocs(qControl);
+                if (!queryControlSnap.empty) {
+                  userData = queryControlSnap.docs[0].data();
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      if (userData) {
+        const isCarlos = cleanEmail === '21530321' || userData.controlNumber === '21530321' || (userData.datos && userData.datos.no_control === '21530321');
+        const isAna = cleanEmail === '19530001' || userData.controlNumber === '19530001' || (userData.datos && userData.datos.no_control === '19530001');
         
-        dbService.syncUserProfile({
+        const defaultMock = isCarlos 
+          ? MOCK_USERS.student1 
+          : isAna 
+            ? MOCK_USERS.student2 
+            : {
+                id: firebaseUser.uid,
+                name: userData.name || firebaseUser.displayName || 'Estudiante',
+                role: 'student' as const,
+                controlNumber: cleanEmail,
+                career: 'INGENIERÍA EN SISTEMAS COMPUTACIONALES',
+                academicStats: { careerProgress: 0, complementaryCredits: 0 },
+                address: {},
+                email: firebaseUser.email || undefined
+              };
+
+        const finalUserData = {
+          ...defaultMock,
+          id: firebaseUser.uid,
+          name: userData.name || firebaseUser.displayName || 'Estudiante',
+          role: (userData.role || 'student') as any,
+          email: userData.email || firebaseUser.email || undefined,
+          ...userData,
+          birthDate: formatFirebaseDate(userData.birthDate || userData.fecha_nacimiento) || undefined
+        };
+
+        const isUserAdmin = finalUserData.role === 'admin';
+        const progress = finalUserData.academicStats?.careerProgress || 0;
+        const credits = finalUserData.academicStats?.complementaryCredits || 0;
+        const isUserApto = finalUserData.apto === true || (progress >= 70 && credits >= 5);
+
+        if (!isUserAdmin && !isUserApto) {
+          setError(`No cumples con los requisitos académicos mínimos para acceder a la plataforma de residencias. Se requiere un mínimo del 70% de avance académico y 5 créditos complementarios. Actualmente cuentas con: ${progress}% de avance y ${credits} créditos.`);
+          setIsLoggingIn(false);
+          return;
+        }
+
+        onLogin(finalUserData);
+      } else {
+        // Create user profile on first login with Firebase Auth
+        const initialUserData = {
+          id: firebaseUser.uid,
           name: firebaseUser.displayName || 'Estudiante',
-          controlNumber: 'TEMP-' + firebaseUser.uid.substring(0, 5),
-          career: 'POR DEFINIR'
-        }).catch(err => console.error("Error syncing profile:", err));
+          role: 'student' as const,
+          email: firebaseUser.email || undefined,
+          controlNumber: cleanEmail.match(/^\d+$/) ? cleanEmail : 'TEMP-' + firebaseUser.uid.substring(0, 5),
+          career: 'INGENIERÍA EN SISTEMAS COMPUTACIONALES',
+          apto: false,
+          academicStats: { careerProgress: 0, complementaryCredits: 0 }
+        };
+        
+        setError("No cuentas con un expediente académico registrado en Conecta2. Comunícate con el administrador escolar para cargar tus datos escolares y verificar si cumples con los requisitos previos (70% de avance académico y 5 créditos complementarios).");
+        setIsLoggingIn(false);
+        return;
       }
     } catch (err: any) {
-      console.error(err);
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        setError('Credenciales incorrectas. Verifica tu correo y contraseña.');
+      console.error("Firebase auth error details:", err);
+      if (err.code === 'auth/operation-not-allowed') {
+        setError('El proveedor de inicio de sesión con Correo/Contraseña no está habilitado en tu consola de Firebase. Por favor, actívalo en la sección: Build > Authentication > Sign-in method.');
+      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError('Acceso incorrecto. Verifica tu correo u octeto de matrícula y tu contraseña. Si usas tu base de datos propia, verifica que el usuario esté registrado y que el proveedor de Correo/Contraseña esté activo.');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('El formato del usuario o correo ingresado es inválido para Firebase.');
       } else {
-        setError('Error al conectar con la plataforma.');
+        setError(`Error de autenticación con Firebase: ${err.message || err.code || err}`);
       }
       setIsLoggingIn(false);
     }

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserData, Dependency } from '../../types';
 import { Sidebar } from './Sidebar';
@@ -8,25 +8,73 @@ import { CatalogView } from './CatalogView';
 import { DocumentsView } from './DocumentsView';
 import { AdminCatalogView } from './AdminCatalogView';
 import { AdminReviewsView } from './AdminReviewsView';
+import * as dbService from '../../services/dbService';
 
 export function Dashboard({ 
   user, 
   onLogout, 
   isDarkMode, 
-  onToggleDarkMode 
+  onToggleDarkMode,
+  onUpdateProfile
 }: { 
   user: UserData, 
   onLogout: () => void, 
   isDarkMode: boolean, 
-  onToggleDarkMode: () => void 
+  onToggleDarkMode: () => void,
+  onUpdateProfile?: (u: UserData) => void
 }) {
   const [activeTab, setActiveTab] = useState(user.role === 'admin' ? 'AdminCatalog' : 'Profile');
   const [selectedDependency, setSelectedDependency] = useState<Dependency | null>(null);
-  const [dataConfirmed, setDataConfirmed] = useState(false);
+  const [dataConfirmed, setDataConfirmed] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (user.role === 'student' && user.id_dependencia && !selectedDependency) {
+      dbService.getDependencies().then(deps => {
+        const found = deps.find(d => d.id === user.id_dependencia);
+        if (found) {
+          setSelectedDependency(found);
+        } else {
+          // Minimal fallback so that navigation functions and they can view documents
+          setSelectedDependency({
+            id: user.id_dependencia!,
+            name: user.dependencia_seleccionada || 'Dependencia Seleccionada',
+            category: 'General',
+            subCategory: 'Residencias',
+            location: 'Cancún',
+            vacancies: 0,
+            maxVacancies: 5,
+            status: 'Lugares Limitados',
+            image: ''
+          });
+        }
+      }).catch(err => {
+        console.error("Error pre-loading chosen dependency details: ", err);
+        // Fallback minimal object
+        setSelectedDependency({
+          id: user.id_dependencia!,
+          name: user.dependencia_seleccionada || 'Dependencia Seleccionada',
+          category: 'General',
+          subCategory: 'Residencias',
+          location: 'Cancún',
+          vacancies: 0,
+          maxVacancies: 5,
+          status: 'Lugares Limitados',
+          image: ''
+        });
+      });
+    }
+  }, [user.id_dependencia]);
 
   const handleSelectDependency = (dep: Dependency) => {
     setSelectedDependency(dep);
+    if (onUpdateProfile) {
+      onUpdateProfile({
+        ...user,
+        id_dependencia: dep.id,
+        dependencia_seleccionada: dep.name
+      });
+    }
     setActiveTab('Docs');
   };
 
@@ -47,6 +95,7 @@ export function Dashboard({
         return (
           <ProfileView 
             user={user} 
+            onUpdateProfile={onUpdateProfile}
             onConfirmData={() => {
               setDataConfirmed(true);
               setActiveTab('Catalog');
@@ -55,7 +104,7 @@ export function Dashboard({
           />
         );
       case 'Catalog':
-        return <CatalogView onSelectDependency={handleSelectDependency} isDarkMode={isDarkMode} />;
+        return <CatalogView user={user} onSelectDependency={handleSelectDependency} isDarkMode={isDarkMode} />;
       case 'Docs':
         return <DocumentsView user={user} isDarkMode={isDarkMode} />;
       default:

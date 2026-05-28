@@ -62,6 +62,7 @@ function AppContent() {
       {view === 'dashboard' && user && (
         <Dashboard 
           user={user}
+          onUpdateProfile={(updatedUser) => setUser(updatedUser)}
           onLogout={handleLogout}
           isDarkMode={isDarkMode}
           onToggleDarkMode={toggleDarkMode}

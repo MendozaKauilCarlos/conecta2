@@ -27,7 +27,7 @@ export function DependencyCard({
       
       <div className="flex items-start justify-between mb-8 relative z-10">
         <div className={`w-14 h-14 rounded-2xl overflow-hidden border-2 shadow-inner group-hover:scale-110 transition-transform duration-500 ${isDarkMode ? 'bg-[#0a0f18] border-neutral-800' : 'bg-neutral-50 border-white'}`}>
-          <img src={dependency.image} alt={dependency.name} className="w-full h-full object-cover" />
+          <img src={dependency.image} alt={dependency.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
         </div>
         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
           isDarkMode 

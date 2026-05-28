@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 const getEnv = (key: string) => {
   const env = (import.meta as any).env;
@@ -23,13 +24,13 @@ const getEnv = (key: string) => {
 };
 
 const firebaseConfig = {
-  apiKey: getEnv('VITE_FIREBASE_API_KEY'),
-  authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN'),
-  projectId: getEnv('VITE_FIREBASE_PROJECT_ID'),
-  storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET'),
-  messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
-  appId: getEnv('VITE_FIREBASE_APP_ID'),
-  measurementId: getEnv('VITE_FIREBASE_MEASUREMENT_ID')
+  apiKey: process.env.FIREBASE_API_KEY || getEnv('VITE_FIREBASE_API_KEY'),
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN || getEnv('VITE_FIREBASE_AUTH_DOMAIN'),
+  projectId: process.env.FIREBASE_PROJECT_ID || getEnv('VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || getEnv('VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: process.env.FIREBASE_APP_ID || getEnv('VITE_FIREBASE_APP_ID'),
+  measurementId: process.env.FIREBASE_MEASUREMENT_ID || getEnv('VITE_FIREBASE_MEASUREMENT_ID')
 };
 
 // Validación previa para dar un error más claro
@@ -40,5 +41,6 @@ if (!firebaseConfig.apiKey) {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const storage = getStorage(app);
 
 export default app;

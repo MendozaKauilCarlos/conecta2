@@ -5,6 +5,61 @@ import { Info, Edit, ShieldCheck, CheckCircle2, AlertCircle, History, Sparkles, 
 import { UserData } from '../../types';
 import * as dbService from '../../services/dbService';
 
+const formatInputDate = (val: any): string => {
+  if (!val) return "";
+  if (typeof val === "string") {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+    try {
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) {
+        return d.toISOString().substring(0, 10);
+      }
+    } catch {}
+    return val;
+  }
+  if (val instanceof Date) {
+    return val.toISOString().substring(0, 10);
+  }
+  if (val && typeof val.toDate === "function") {
+    try {
+      return val.toDate().toISOString().substring(0, 10);
+    } catch {}
+  }
+  if (val && typeof val.seconds === "number") {
+    try {
+      const d = new Date(val.seconds * 1000);
+      return d.toISOString().substring(0, 10);
+    } catch {}
+  }
+  return String(val);
+};
+
+const formatDisplayDate = (val: any): string => {
+  if (!val) return "";
+  if (typeof val === "string") {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+      const [y, m, d] = val.split('-');
+      return `${d}/${m}/${y}`;
+    }
+    return val;
+  }
+  if (val instanceof Date) {
+    return val.toLocaleDateString();
+  }
+  if (val && typeof val.toDate === "function") {
+    try {
+      return val.toDate().toLocaleDateString();
+    } catch {}
+  }
+  if (val && typeof val.seconds === "number") {
+    try {
+      const d = new Date(val.seconds * 1000);
+      return d.toLocaleDateString();
+    } catch {}
+  }
+  return String(val);
+};
+
 export function ProfileView({ 
   user, 
   onUpdateProfile,
@@ -21,7 +76,11 @@ export function ProfileView({
   const [isEditing, setIsEditing] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [editForm, setEditForm] = useState<UserData>(user);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [editForm, setEditForm] = useState<UserData>({
+    ...user,
+    birthDate: formatInputDate(user.birthDate)
+  });
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [submissions, setSubmissions] = useState<any[]>([]);
@@ -42,7 +101,12 @@ export function ProfileView({
     fetchSubmissions();
   }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    try {
+      await dbService.syncUserProfile(editForm);
+    } catch (err) {
+      console.error("Error updating user profile in Firestore: ", err);
+    }
     if (onUpdateProfile) {
       onUpdateProfile(editForm);
     }
@@ -51,11 +115,22 @@ export function ProfileView({
     setTimeout(() => setShowSuccess(false), 3000);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const imageUrl = URL.createObjectURL(file);
-      setEditForm(prev => ({ ...prev, profilePicture: imageUrl }));
+      setIsUploadingPhoto(true);
+      try {
+        const downloadUrl = await dbService.uploadProfilePicture(file);
+        if (downloadUrl) {
+          setEditForm(prev => ({ ...prev, profilePicture: downloadUrl }));
+        }
+      } catch (err) {
+        console.error("Error al subir imagen a Storage, cargando preview local como respaldo:", err);
+        const imageUrl = URL.createObjectURL(file);
+        setEditForm(prev => ({ ...prev, profilePicture: imageUrl }));
+      } finally {
+        setIsUploadingPhoto(false);
+      }
     }
   };
 
@@ -108,10 +183,17 @@ export function ProfileView({
                   <span className={`${isDarkMode ? 'text-neutral-700' : 'text-brand-blue/30'}`}>{user.name.split(' ').map(n => n[0]).join('').substring(0, 2)}</span>
                 )}
                 
-                {isEditing && (
+                {isUploadingPhoto && (
+                  <div className="absolute inset-0 bg-neutral-900/70 backdrop-blur-sm flex flex-col items-center justify-center text-white z-20">
+                    <Loader2 size={24} className="animate-spin text-brand-teal mb-1" />
+                    <span className="text-[8px] font-black uppercase tracking-widest text-neutral-300">Subiendo...</span>
+                  </div>
+                )}
+                
+                {isEditing && !isUploadingPhoto && (
                   <button 
                     onClick={() => fileInputRef.current?.click()}
-                    className="absolute inset-0 bg-brand-blue/60 backdrop-blur-sm flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                    className="absolute inset-0 bg-brand-blue/60 backdrop-blur-sm flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all cursor-pointer z-10"
                   >
                     <Edit size={24} className="mb-2" />
                     <span className="text-[10px] font-black uppercase tracking-[0.2em]">Cambiar Foto</span>
@@ -209,7 +291,7 @@ export function ProfileView({
             {isEditing ? (
               <input type="date" value={editForm.birthDate || ''} onChange={e => setEditForm({...editForm, birthDate: e.target.value})} className={`w-full px-6 py-4 rounded-[1.5rem] border-2 border-transparent focus:ring-4 focus:ring-brand-teal/5 focus:border-brand-teal font-bold outline-none transition-all shadow-inner ${isDarkMode ? 'bg-[#0a0f18] text-white' : 'bg-neutral-50 text-neutral-800 focus:bg-white'}`} />
             ) : (
-              <div className={`px-6 py-5 rounded-[1.5rem] border font-bold shadow-inner transition-colors duration-500 ${isDarkMode ? 'bg-[#0a0f18] border-neutral-800 text-white' : 'bg-neutral-50 border-neutral-100 text-brand-blue'}`}>{user.birthDate || 'No especificada'}</div>
+              <div className={`px-6 py-5 rounded-[1.5rem] border font-bold shadow-inner transition-colors duration-500 ${isDarkMode ? 'bg-[#0a0f18] border-neutral-800 text-white' : 'bg-neutral-50 border-neutral-100 text-brand-blue'}`}>{formatDisplayDate(user.birthDate) || 'No especificada'}</div>
             )}
           </div>
           <div>

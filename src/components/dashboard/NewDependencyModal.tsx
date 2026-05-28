@@ -1,30 +1,58 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Building2, Save, Plus, Trash2, Info, User, Phone, Mail, Clock, MapPin, Hash, Briefcase } from 'lucide-react';
+import { X, Building2, Save, Plus, Trash2, Info, User, Phone, Mail, Clock, MapPin, Hash, Briefcase, Upload, Loader2 } from 'lucide-react';
 
 interface NewDependencyModalProps {
   onClose: () => void;
   onSave: (data: any) => void;
   isDarkMode?: boolean;
+  dependency?: any;
 }
 
-export function NewDependencyModal({ onClose, onSave, isDarkMode }: NewDependencyModalProps) {
+export function NewDependencyModal({ onClose, onSave, isDarkMode, dependency }: NewDependencyModalProps) {
+  const [isUploading, setIsUploading] = useState(false);
   const [formData, setFormData] = useState({
-    name: '',
-    objective: '',
-    programName: '',
-    activities: [''],
+    id: dependency?.id || undefined,
+    name: dependency?.name || '',
+    objective: dependency?.objective || '',
+    programName: dependency?.subCategory || dependency?.programName || '',
+    activities: dependency?.activities && dependency.activities.length ? [...dependency.activities] : [''],
     contact: {
-      titular: '',
-      phone: '',
-      email: '',
-      schedule: '',
-      address: ''
+      titular: dependency?.contact?.titular || '',
+      phone: dependency?.contact?.phone || '',
+      email: dependency?.contact?.email || '',
+      schedule: dependency?.contact?.schedule || '',
+      address: dependency?.contact?.address || '',
+      puesto_titular: dependency?.contact?.puesto_titular || '',
+      responsable_del_programa: dependency?.contact?.responsable_del_programa || '',
+      modalidad: dependency?.contact?.modalidad || 'presencial',
+      ubicacion_maps: dependency?.contact?.ubicacion_maps || ''
     },
-    vacancies: 1,
-    category: 'Gobierno / Ayuntamiento'
+    vacancies: dependency?.vacancies !== undefined ? dependency.vacancies : 1,
+    maxVacancies: dependency?.maxVacancies !== undefined ? dependency.maxVacancies : 10,
+    category: dependency?.category || 'Gobierno / Ayuntamiento',
+    subCategory: dependency?.subCategory || 'General',
+    location: dependency?.location || 'Cancún',
+    status: dependency?.status || 'Disponible',
+    image: dependency?.image || ''
   });
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const { uploadDependencyLogo } = await import('../../services/dbService');
+      const url = await uploadDependencyLogo(file);
+      setFormData(prev => ({ ...prev, image: url }));
+    } catch (err) {
+      console.error("Error uploading logo:", err);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const handleActivityChange = (index: number, value: string) => {
     const newActivities = [...formData.activities];
@@ -43,7 +71,10 @@ export function NewDependencyModal({ onClose, onSave, isDarkMode }: NewDependenc
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    onSave({
+      ...formData,
+      subCategory: formData.programName
+    });
   };
 
   return (
@@ -63,8 +94,12 @@ export function NewDependencyModal({ onClose, onSave, isDarkMode }: NewDependenc
               <Building2 size={24} />
             </div>
             <div>
-              <h2 className={`text-2xl font-black tracking-tight ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>Nueva Dependencia</h2>
-              <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Añadir al catálogo oficial</p>
+              <h2 className={`text-2xl font-black tracking-tight ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>
+                {dependency ? 'Editar Dependencia' : 'Nueva Dependencia'}
+              </h2>
+              <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">
+                {dependency ? 'Modificar datos del catálogo' : 'Añadir al catálogo oficial'}
+              </p>
             </div>
           </div>
           <button 
@@ -77,6 +112,79 @@ export function NewDependencyModal({ onClose, onSave, isDarkMode }: NewDependenc
 
         {/* Content */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-10 space-y-12 custom-scrollbar">
+          {/* Logo / Imagen */}
+          <section className="space-y-6">
+            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-orange flex items-center gap-2">
+              <Building2 size={14} />
+              Logo / Imagen de la Dependencia
+            </h3>
+            <div className={`p-8 border-2 border-dashed rounded-[2rem] transition-colors flex flex-col sm:flex-row items-center gap-8 ${
+              isDarkMode ? 'border-neutral-800 bg-[#0a0f18]/30' : 'border-neutral-100 bg-neutral-50/30'
+            }`}>
+              <div className="relative group shrink-0">
+                <div className={`w-28 h-28 rounded-3xl overflow-hidden border shadow-inner flex items-center justify-center transition-colors ${
+                  isDarkMode ? 'bg-[#0a0f18] border-neutral-800' : 'bg-white border-neutral-100'
+                }`}>
+                  {formData.image ? (
+                    <img src={formData.image} alt="Logo de dependencia" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <Building2 size={36} className="text-neutral-400" />
+                  )}
+                </div>
+                {formData.image && (
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, image: '' })}
+                    className="absolute -top-2 -right-2 p-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full shadow-lg transition-transform scale-90 hover:scale-100"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+              <div className="flex-1 space-y-4 w-full">
+                <div className="flex flex-col md:flex-row gap-4 items-end">
+                  <div className="flex-1 space-y-2 w-full">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-500 ml-1">URL de la Imagen / Logo</label>
+                    <input 
+                      type="text"
+                      value={formData.image}
+                      onChange={(e) => setFormData({...formData, image: e.target.value})}
+                      placeholder="https://ejemplo.com/logo.png o súbelo..."
+                      className={`w-full px-6 py-4 rounded-xl border-2 outline-none transition-all focus:border-brand-teal font-bold text-xs ${isDarkMode ? 'bg-[#0a0f18] border-neutral-800 text-white' : 'bg-white border-neutral-150 text-brand-blue'}`}
+                    />
+                  </div>
+                  <div className="w-full md:w-auto shrink-0">
+                    <label className={`w-full md:w-auto text-center px-6 py-4 rounded-xl font-black text-xs transition-all cursor-pointer shadow-md flex items-center justify-center gap-2 border-2 ${
+                      isUploading 
+                        ? 'bg-neutral-500 cursor-not-allowed border-transparent text-white' 
+                        : 'bg-brand-teal text-white border-transparent hover:brightness-110 active:scale-95'
+                    }`}>
+                      {isUploading ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          <span>Subiendo...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload size={16} />
+                          <span>Subir Imagen</span>
+                        </>
+                      )}
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleLogoUpload} 
+                        className="hidden" 
+                        disabled={isUploading}
+                      />
+                    </label>
+                  </div>
+                </div>
+                <p className="text-[10px] font-bold text-neutral-500">Formato cuadrado PNG, JPG o SVG con fondo transparente o blanco preferentemente.</p>
+              </div>
+            </div>
+          </section>
+
           {/* General Information */}
           <section className="space-y-6">
             <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-orange flex items-center gap-2">
@@ -243,6 +351,60 @@ export function NewDependencyModal({ onClose, onSave, isDarkMode }: NewDependenc
                   value={formData.contact.address}
                   onChange={(e) => setFormData({...formData, contact: {...formData.contact, address: e.target.value}})}
                   placeholder="Calle, Número, Colonia, CP"
+                  className={`w-full px-6 py-4 rounded-2xl border-2 outline-none transition-all focus:border-brand-teal font-bold text-sm ${isDarkMode ? 'bg-[#0a0f18] border-neutral-800 text-white placeholder:text-neutral-700' : 'bg-neutral-50 border-neutral-100 text-brand-blue'}`}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-500 ml-1 flex items-center gap-2">
+                  <User size={10} /> Puesto del Titular
+                </label>
+                <input 
+                  type="text" 
+                  value={formData.contact.puesto_titular}
+                  onChange={(e) => setFormData({...formData, contact: {...formData.contact, puesto_titular: e.target.value}})}
+                  placeholder="Ej. Directora General"
+                  className={`w-full px-6 py-4 rounded-2xl border-2 outline-none transition-all focus:border-brand-teal font-bold text-sm ${isDarkMode ? 'bg-[#0a0f18] border-neutral-800 text-white placeholder:text-neutral-700' : 'bg-neutral-50 border-neutral-100 text-brand-blue'}`}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-500 ml-1 flex items-center gap-2">
+                  <User size={10} /> Responsable del Programa
+                </label>
+                <input 
+                  type="text" 
+                  value={formData.contact.responsable_del_programa}
+                  onChange={(e) => setFormData({...formData, contact: {...formData.contact, responsable_del_programa: e.target.value}})}
+                  placeholder="Nombre de la persona responsable"
+                  className={`w-full px-6 py-4 rounded-2xl border-2 outline-none transition-all focus:border-brand-teal font-bold text-sm ${isDarkMode ? 'bg-[#0a0f18] border-neutral-800 text-white placeholder:text-neutral-700' : 'bg-neutral-50 border-neutral-100 text-brand-blue'}`}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-500 ml-1 flex items-center gap-2">
+                  <Briefcase size={10} /> Modalidad del Servicio
+                </label>
+                <select 
+                  value={formData.contact.modalidad}
+                  onChange={(e) => setFormData({...formData, contact: {...formData.contact, modalidad: e.target.value}})}
+                  className={`w-full px-6 py-4 rounded-2xl border-2 outline-none transition-all focus:border-brand-teal font-bold text-sm bg-no-repeat ${isDarkMode ? 'bg-[#0a0f18] border-neutral-800 text-white' : 'bg-neutral-50 border-neutral-100 text-brand-blue'}`}
+                >
+                  <option value="presencial">Presencial</option>
+                  <option value="hibrida">Híbrida</option>
+                  <option value="distancia">A distancia / Virtual</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-500 ml-1 flex items-center gap-2">
+                  <MapPin size={10} /> Enlace de Mapas (Google Maps URL)
+                </label>
+                <input 
+                  type="url" 
+                  value={formData.contact.ubicacion_maps}
+                  onChange={(e) => setFormData({...formData, contact: {...formData.contact, ubicacion_maps: e.target.value}})}
+                  placeholder="https://maps.app.goo.gl/..."
                   className={`w-full px-6 py-4 rounded-2xl border-2 outline-none transition-all focus:border-brand-teal font-bold text-sm ${isDarkMode ? 'bg-[#0a0f18] border-neutral-800 text-white placeholder:text-neutral-700' : 'bg-neutral-50 border-neutral-100 text-brand-blue'}`}
                 />
               </div>

@@ -29,6 +29,8 @@ export interface UserData {
   semester?: string;
   career?: string;
   nss?: string;
+  id_dependencia?: string;
+  dependencia_seleccionada?: string;
 }
 
 export interface Dependency {
@@ -49,5 +51,9 @@ export interface Dependency {
     email: string;
     schedule: string;
     address: string;
+    puesto_titular?: string;
+    responsable_del_programa?: string;
+    modalidad?: string;
+    ubicacion_maps?: string;
   };
 }
