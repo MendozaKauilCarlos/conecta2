@@ -473,55 +473,6 @@ export function ProfileView({
         )}
       </AnimatePresence>
 
-      {!isEditing && (
-        <div className="mt-12 space-y-6">
-          <h3 className={`text-[10px] font-black uppercase tracking-[0.2em] ml-1 flex items-center gap-3 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
-            <History size={14} className="text-brand-orange" />
-            Historial de Trámites en Nube
-          </h3>
-          
-          <div className={`rounded-[2.5rem] border overflow-hidden transition-colors duration-500 ${isDarkMode ? 'bg-[#121926] border-neutral-800' : 'bg-white border-neutral-100 shadow-xl shadow-blue-900/5'}`}>
-            <div className="p-8">
-              {loadingSubmissions ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-4">
-                  <Loader2 className="w-8 h-8 text-brand-teal animate-spin" />
-                  <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Cargando historial...</span>
-                </div>
-              ) : submissions.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 ${isDarkMode ? 'bg-white/5' : 'bg-neutral-50'}`}>
-                    <FileText className="text-neutral-300" size={32} />
-                  </div>
-                  <p className={`font-bold transition-colors duration-500 ${isDarkMode ? 'text-neutral-600' : 'text-neutral-400'}`}>No tienes trámites guardados aún.</p>
-                  <p className="text-xs font-medium text-neutral-500 mt-2">Tus formularios guardados en Firebase aparecerán aquí.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {submissions.map((sub, idx) => (
-                    <div key={idx} className={`p-6 rounded-2xl border flex items-center justify-between transition-all group hover:scale-[1.01] ${isDarkMode ? 'bg-[#0a0f18] border-neutral-800 hover:border-brand-teal/50' : 'bg-neutral-50 border-neutral-100 hover:bg-white hover:shadow-lg'}`}>
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-brand-teal/10 text-brand-teal flex items-center justify-center">
-                          <Sparkles size={18} />
-                        </div>
-                        <div>
-                          <h4 className={`font-black text-sm tracking-tight ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>{sub.templateId === 'anexo-17' ? 'Solicitud de Servicio Social (Anexo 17)' : 'Formulario Guardado'}</h4>
-                          <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Enviado: {sub.submittedAt?.toDate?.()?.toLocaleDateString() || 'Reciente'}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                         <span className="text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-brand-teal/10 text-brand-teal border border-brand-teal/20">
-                           En Nube
-                         </span>
-                         <ArrowRight size={14} className="text-neutral-400 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

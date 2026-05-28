@@ -1,14 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { FirebaseProvider } from './components/FirebaseProvider';
-import { LandingPage } from './components/LandingPage';
 import { LoginPage } from './components/LoginPage';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { ChatBot } from './components/ChatBot';
 import { UserData } from './types';
 
 function AppContent() {
-  const [view, setView] = useState<'landing' | 'login' | 'dashboard'>('landing');
+  const [view, setView] = useState<'login' | 'dashboard'>('login');
   const [user, setUser] = useState<UserData | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -35,25 +34,16 @@ function AppContent() {
 
   const handleLogout = () => {
     setUser(null);
-    setView('landing');
+    setView('login');
   };
 
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
   return (
     <div className={`min-h-screen transition-colors duration-500 ${isDarkMode ? 'dark bg-[#0a0f18]' : 'bg-neutral-50'}`}>
-      {view === 'landing' && (
-        <LandingPage 
-          onSelect={() => setView('login')} 
-          isDarkMode={isDarkMode}
-          onToggleDarkMode={toggleDarkMode}
-        />
-      )}
-      
       {view === 'login' && (
         <LoginPage 
           onLogin={handleLogin}
-          onBack={() => setView('landing')}
           isDarkMode={isDarkMode}
           onToggleDarkMode={toggleDarkMode}
         />

@@ -20,7 +20,7 @@ export function ChatBot({ isDarkMode }: { isDarkMode?: boolean }) {
     {
       id: '1',
       role: 'assistant',
-      content: '¡Hola! Soy tu asistente virtual de **Conecta2**. Estoy aquí para resolver tus dudas sobre el portal y los trámites de Servicio Social. ¿En qué puedo apoyarte?',
+      content: '¡Hola! Soy tu asistente virtual de **VinculaTec**. Estoy aquí para resolver tus dudas sobre el portal y los trámites de Servicio Social. ¿En qué puedo apoyarte?',
       timestamp: new Date(),
     },
   ]);
@@ -64,16 +64,16 @@ export function ChatBot({ isDarkMode }: { isDarkMode?: boolean }) {
             })),
             { role: 'user', parts: [{ text: userMessage.content }] }
           ],
-          systemInstruction: `Eres un asistente virtual experto y estrictamente enfocado en la plataforma 'Conecta2'. Tu única misión es guiar a los estudiantes en su proceso administrativo de Servicio Social dentro del portal.
+          systemInstruction: `Eres un asistente virtual experto y estrictamente enfocado en la plataforma 'VinculaTec'. Tu única misión es guiar a los estudiantes en su proceso administrativo de Servicio Social dentro del portal.
 
 REGLAS CRÍTICAS DE COMPORTAMIENTO:
 1. TONO: Profesional, ejecutivo, empático pero muy concreto. Usa listas claras y negritas para resaltar puntos clave.
 2. LÍMITE DE DOMINIO: Solo respondes dudas sobre:
    - Requisitos de acceso (70% de créditos, créditos complementarios).
    - Documentación técnica (Cartas de Aceptación, Compromiso, Reportes Bimestrales, Liberación).
-   - Uso de la plataforma Conecta2 (Problemas de acceso, carga de archivos, navegación).
+   - Uso de la plataforma VinculaTec (Problemas de acceso, carga de archivos, navegación).
    - Catálogo de dependencias disponibles.
-3. RECHAZO DE TAREAS AJENAS: Si el usuario pide cosas no relacionadas con el portal o el servicio social (ej: pedir comida, chistes, programación, temas personales), debes responder con cortesía: "Lo lamento, mi función se limita exclusivamente a la orientación técnica del portal Conecta2 y trámites de Servicio Social. ¿Tienes alguna duda sobre tu proceso?"
+3. RECHAZO DE TAREAS AJENAS: Si el usuario pide cosas no relacionadas con el portal o el servicio social (ej: pedir comida, chistes, programación, temas personales), debes responder con cortesía: "Lo lamento, mi función se limita exclusivamente a la orientación técnica del portal VinculaTec y trámites de Servicio Social. ¿Tienes alguna duda sobre tu proceso?"
 4. ESTILO: Evita introducciones largas. Ve directo al grano. Formatea las respuestas usando Markdown (listas, negritas, saltos de línea) para que sean fáciles de leer en una ventana de chat pequeña.
 5. IDIOMA: Español de México.`,
         }),
@@ -129,7 +129,7 @@ REGLAS CRÍTICAS DE COMPORTAMIENTO:
                   <Bot size={24} className="text-brand-teal" />
                 </div>
                 <div>
-                  <h3 className="font-black text-lg tracking-tight leading-none mb-1">Asistente Conecta2</h3>
+                  <h3 className="font-black text-lg tracking-tight leading-none mb-1">Asistente VinculaTec</h3>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
                     <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">En línea</span>

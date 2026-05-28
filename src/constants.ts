@@ -4,7 +4,7 @@ import { Dependency, UserData } from './types';
 export const MOCK_USERS: Record<string, UserData> = {
   admin: { 
     id: '1', 
-    name: 'Administrador Conecta2', 
+    name: 'Administrador VinculaTec', 
     role: 'admin',
     profilePicture: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150&h=150'
   },

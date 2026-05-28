@@ -583,7 +583,7 @@ function ReviewDocsModal({ student, isDarkMode, onClose, onUpdate }: ReviewDocsM
                       </div>
                       <div>
                         <h4 className="text-base font-black tracking-tight">{docTitles[activeKey]}</h4>
-                        <p className={`text-[10px] uppercase font-bold tracking-widest ${isDarkMode ? 'text-[#00c49f]/80' : 'text-brand-teal'}`}>Visualizador Oficial Conecta2Tec</p>
+                        <p className={`text-[10px] uppercase font-bold tracking-widest ${isDarkMode ? 'text-[#00c49f]/80' : 'text-brand-teal'}`}>Visualizador Oficial VinculaTec</p>
                       </div>
                     </div>
                     

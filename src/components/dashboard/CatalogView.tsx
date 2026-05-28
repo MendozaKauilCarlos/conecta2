@@ -56,8 +56,75 @@ export function CatalogView({
     });
   }, [dependencies, filter, searchQuery]);
 
+  const selectedDep = useMemo(() => {
+    if (!user.id_dependencia) return null;
+    return dependencies.find(d => d.id === user.id_dependencia);
+  }, [dependencies, user.id_dependencia]);
+
   return (
     <div className="space-y-8">
+      {/* Active Selection Banner */}
+      {selectedDep && (
+        <motion.div 
+          initial={{ opacity: 0, y: -15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`relative overflow-hidden rounded-[2.5rem] p-8 border-2 transition-all duration-500 shadow-xl ${
+            isDarkMode 
+              ? 'bg-[#121926]/60 border-[#00c49f]/30 shadow-[#00c49f]/5' 
+              : 'bg-white border-[#00c49f]/30 shadow-[#00c49f]/5'
+          }`}
+        >
+          {/* Decorative aura */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-[#00c49f]/5 blur-[80px] rounded-full pointer-events-none -translate-y-1/3 translate-x-1/3" />
+          
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 relative z-10">
+            <div className="flex items-start sm:items-center gap-6">
+              <div className="w-16 h-16 bg-[#00c49f]/10 text-[#00c49f] rounded-2xl flex items-center justify-center border border-[#00c49f]/20 shrink-0">
+                <Building2 size={28} />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.25em] text-[#00c49f] px-3 py-1 bg-[#00c49f]/10 rounded-full animate-pulse border border-[#00c49f]/20">
+                    Tu Selección Activa
+                  </span>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                    ID: {selectedDep.id}
+                  </span>
+                </div>
+                <h3 className={`text-2xl font-black tracking-tight ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>
+                  {selectedDep.name}
+                </h3>
+                <p className={`text-sm font-semibold ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                  Programa: <strong className="text-brand-teal">{selectedDep.subCategory}</strong> • Ubicación: <strong>{selectedDep.location}</strong>
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex gap-4 shrink-0">
+              <button 
+                onClick={() => setSelectedDependencyModal(selectedDep)}
+                className={`px-6 py-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all border-2 active:scale-95 ${
+                  isDarkMode 
+                    ? 'border-neutral-800 text-white hover:bg-neutral-800' 
+                    : 'border-neutral-200 text-brand-blue hover:bg-neutral-50'
+                }`}
+              >
+                Ver Info Completa
+              </button>
+            </div>
+          </div>
+          
+          <div className={`mt-6 pt-6 border-t font-semibold text-xs leading-relaxed flex items-center gap-2.5 ${
+            isDarkMode ? 'border-neutral-800/80 text-neutral-500' : 'border-neutral-100/80 text-neutral-500'
+          }`}>
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#00c49f] shrink-0 animate-ping" />
+            <span>
+              Has seleccionado esta dependencia. Tu proceso administrativo y tus reportes bimestrales están vinculados de forma oficial a este programa.
+            </span>
+          </div>
+        </motion.div>
+      )}
+
       {/* Search & Action */}
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4">
         <div className="flex-1 relative group">
@@ -130,6 +197,7 @@ export function CatalogView({
                   dependency={dep} 
                   onViewDetails={() => setSelectedDependencyModal(dep)}
                   isDarkMode={isDarkMode}
+                  isSelected={user.id_dependencia === dep.id}
                 />
               ))}
             </motion.div>
@@ -204,7 +272,7 @@ function NewAgreementNoticeModal({ onClose, isDarkMode }: { onClose: () => void,
         <div className="p-8 sm:p-14 overflow-y-auto custom-scrollbar">
           <div className={`border rounded-[2rem] p-8 mb-12 flex items-start gap-6 shadow-sm transition-colors duration-500 ${isDarkMode ? 'bg-brand-teal/5 border-brand-teal/20' : 'bg-brand-teal/5 border-brand-teal/20'}`}>
             <p className={`font-bold text-base sm:text-lg leading-relaxed transition-colors duration-500 ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>
-              Por motivos de protocolos de seguridad interna, el trámite de propuesta de nuevo convenio se realizará de manera presencial en las oficinas de Conecta2.
+              Por motivos de protocolos de seguridad interna, el trámite de propuesta de nuevo convenio se realizará de manera presencial en las oficinas de VinculaTec.
             </p>
           </div>
           <button 

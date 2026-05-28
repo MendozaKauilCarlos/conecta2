@@ -103,7 +103,7 @@ export function LoginPage({
       if (isInstitutionalAdmin) {
         onLogin({
           id: firebaseUser.uid,
-          name: firebaseUser.displayName || 'Vincular Conecta2 Admin',
+          name: firebaseUser.displayName || 'Vincular VinculaTec Admin',
           role: 'admin',
           email: firebaseUser.email || 'ss_vinculacion@cancun.tecnm.mx',
           profilePicture: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150&h=150'
@@ -178,6 +178,7 @@ export function LoginPage({
             apto: aptoVal,
             id_dependencia: alumData.id_dependencia || "",
             dependencia_seleccionada: alumData.dependencia_seleccionada || "",
+            perfil_confirmado: alumData.perfil_confirmado || false,
             academicStats: {
               careerProgress: computedProgress,
               complementaryCredits: compCredits
@@ -288,7 +289,7 @@ export function LoginPage({
           academicStats: { careerProgress: 0, complementaryCredits: 0 }
         };
         
-        setError("No cuentas con un expediente académico registrado en Conecta2. Comunícate con el administrador escolar para cargar tus datos escolares y verificar si cumples con los requisitos previos (70% de avance académico y 5 créditos complementarios).");
+        setError("No cuentas con un expediente académico registrado en VinculaTec. Comunícate con el administrador escolar para cargar tus datos escolares y verificar si cumples con los requisitos previos (70% de avance académico y 5 créditos complementarios).");
         setIsLoggingIn(false);
         return;
       }
@@ -339,12 +340,12 @@ export function LoginPage({
           className="absolute inset-0"
         >
           <img 
-            src="https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=2000" 
-            alt="Office Background"
+            src="https://lh5.googleusercontent.com/p/AF1QipN30XInG38D_Y5pWlO00DqUdfv8zZt_49K4iF3B=w1200-h800-p-k-no" 
+            alt="Instituto Tecnológico de Cancún"
             className="w-full h-full object-cover rounded-[3rem]"
             referrerPolicy="no-referrer"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-brand-blue/90 via-brand-blue/40 to-transparent rounded-[3rem]"></div>
+          <div className="absolute inset-0 bg-gradient-to-t from-brand-blue/95 via-brand-blue/50 to-transparent rounded-[3rem]"></div>
         </motion.div>
 
         <div className="absolute top-12 left-12 z-10 flex flex-col items-start gap-6">
@@ -359,17 +360,17 @@ export function LoginPage({
             className="bg-white/5 backdrop-blur-2xl border border-white/20 p-12 rounded-[2.5rem] text-white shadow-2xl relative group overflow-hidden"
           >
             <Quote className="w-12 h-12 text-brand-teal mb-6 opacity-50" />
-            <h2 className="text-4xl font-black leading-[1.1] mb-8 tracking-tight text-white">
-              Diseña tu <span className="text-brand-teal underline decoration-brand-orange underline-offset-8">camino</span> profesional.
+            <h2 className="text-3xl font-black leading-[1.2] mb-8 tracking-tight text-white">
+              "Conocimiento Científico y Tecnológico para un Desarrollo Sustentable"
             </h2>
-            <p className="text-lg text-white/70 leading-relaxed font-medium mb-10 italic">
-              "Simplificando tu camino hacia el éxito profesional."
+            <p className="text-sm text-white/85 leading-relaxed font-bold tracking-wider uppercase mb-10 text-brand-teal">
+              Lema de Excelencia - TecNM Campus Cancún
             </p>
             <div className="flex items-center gap-6 p-6 bg-white/5 rounded-3xl border border-white/10 group-hover:border-brand-teal/30 transition-colors">
               <Logo size="small" showText={false} isDarkMode={true} />
               <div>
-                <h4 className="font-bold text-base text-white">Departamento Conecta2</h4>
-                <p className="text-sm text-white/50 tracking-wider font-bold">Plataforma Profesional</p>
+                <h4 className="font-bold text-base text-white">Departamento de Vinculación</h4>
+                <p className="text-sm text-white/50 tracking-wider font-bold">Portal VinculaTec</p>
               </div>
             </div>
           </motion.div>
@@ -395,7 +396,7 @@ export function LoginPage({
           <div className="mb-14">
             <h2 className={`text-5xl font-black mb-4 tracking-tighter ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>¡Hola de nuevo!</h2>
             <p className={`leading-relaxed text-lg font-medium ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-              Ingresa tus datos para acceder a tu panel de vinculación profesional <span className="text-brand-teal">Conecta2</span>.
+              Ingresa tus datos para acceder a tu panel de vinculación profesional <span className="text-brand-teal font-black">VinculaTec</span>.
             </p>
           </div>
 
@@ -417,7 +418,7 @@ export function LoginPage({
 
             <div className="space-y-2">
               <label className={`block text-[10px] font-black uppercase tracking-[0.2em] ml-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                Correo Institucional
+                Número de Control / Usuario Admin
               </label>
               <div className="relative group">
                 <div className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors ${isDarkMode ? 'text-neutral-600 group-focus-within:text-brand-teal' : 'text-neutral-400 group-focus-within:text-brand-teal'}`}>
@@ -427,7 +428,7 @@ export function LoginPage({
                   type="text" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Usuario o correo institucional"
+                  placeholder="Ej: 21530321 o admin"
                   disabled={isLoggingIn}
                   className={`w-full pl-11 pr-4 py-4 border-2 rounded-2xl focus:ring-4 focus:ring-brand-teal/5 focus:border-brand-teal outline-none transition-all disabled:opacity-50 font-bold ${
                     isDarkMode 
@@ -436,6 +437,15 @@ export function LoginPage({
                   }`}
                 />
               </div>
+              <p className={`text-[10px] ml-1 select-none font-medium ${isDarkMode ? 'text-neutral-500' : 'text-neutral-450'}`}>
+                {email && !email.includes('@') && email.toLowerCase() !== 'admin' ? (
+                  <span>
+                    Acceso como: <strong className="text-brand-teal font-black">{/^\d+$/.test(email) ? 'l' : ''}{email}@cancun.tecnm.mx</strong>
+                  </span>
+                ) : (
+                  <span>Se agregará automáticamente el dominio <strong className="text-brand-teal font-black">@cancun.tecnm.mx</strong></span>
+                )}
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -525,7 +535,7 @@ export function LoginPage({
 
         <div className="mt-12 lg:mt-0">
           <p className={`text-[10px] font-bold uppercase tracking-[0.3em] ${isDarkMode ? 'text-neutral-700' : 'text-neutral-300'}`}>
-            © 2026 CONECTA2
+            © 2026 VINCULATEC - ITC
           </p>
         </div>
       </div>
@@ -560,13 +570,13 @@ function SupportModal({ onClose, isDarkMode }: { onClose: () => void, isDarkMode
           </p>
 
           <div className="space-y-4">
-            <a href="mailto:soporte@conecta2.mx" className={`flex items-center gap-6 p-6 border-2 rounded-[2rem] transition-all group ${isDarkMode ? 'bg-[#0a0f18]/50 border-neutral-800 hover:border-brand-teal' : 'bg-neutral-50 border-neutral-100 hover:border-brand-teal'}`}>
+            <a href="mailto:vinculacion@cancun.tecnm.mx" className={`flex items-center gap-6 p-6 border-2 rounded-[2rem] transition-all group ${isDarkMode ? 'bg-[#0a0f18]/50 border-neutral-800 hover:border-brand-teal' : 'bg-neutral-50 border-neutral-100 hover:border-brand-teal'}`}>
               <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 shadow-sm group-hover:bg-brand-teal/20 transition-colors">
                 <Mail className="text-brand-teal" size={24} />
               </div>
               <div className="text-left">
                 <p className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Vía Correo Electrónico</p>
-                <p className={`font-black tracking-tight ${isDarkMode ? 'text-white/90' : 'text-brand-blue'}`}>soporte@conecta2.mx</p>
+                <p className={`font-black tracking-tight ${isDarkMode ? 'text-white/90' : 'text-brand-blue'}`}>vinculacion@cancun.tecnm.mx</p>
               </div>
             </a>
 

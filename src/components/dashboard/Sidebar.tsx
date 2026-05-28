@@ -158,9 +158,9 @@ export function Sidebar({
                   />
                   <NavItem 
                     icon={<Building2 size={20} />} 
-                    label="Catálogo de Plazas" 
+                    label="Catálogo de Dependencias" 
                     active={activeTab === 'Catalog'} 
-                    locked={false}
+                    locked={!dataConfirmed}
                     onClick={() => onTabChange('Catalog')}
                     isDarkMode={isDarkMode}
                   />
@@ -168,7 +168,7 @@ export function Sidebar({
                     icon={<FileEdit size={20} />} 
                     label="Mis Documentos" 
                     active={activeTab === 'Docs'} 
-                    locked={false}
+                    locked={!dataConfirmed || !user.id_dependencia}
                     onClick={() => onTabChange('Docs')}
                     isDarkMode={isDarkMode}
                   />

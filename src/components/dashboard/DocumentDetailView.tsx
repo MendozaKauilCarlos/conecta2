@@ -715,7 +715,7 @@ export function DocumentDetailView({
         {/* Dynamic Watermark Indicator */}
         <div className="absolute top-4 right-4 bg-brand-teal/10 border border-brand-teal/20 text-brand-teal rounded-lg px-2.5 py-1 text-[8px] font-black uppercase tracking-widest animate-pulse flex items-center gap-1 z-10 pointer-events-none">
           <Clock size={8} />
-          Borrador Digital Conecta2Tec
+          Borrador Digital VinculaTec
         </div>
 
         {/* Oficial Header Table */}

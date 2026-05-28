@@ -31,6 +31,7 @@ export interface UserData {
   nss?: string;
   id_dependencia?: string;
   dependencia_seleccionada?: string;
+  perfil_confirmado?: boolean;
 }
 
 export interface Dependency {

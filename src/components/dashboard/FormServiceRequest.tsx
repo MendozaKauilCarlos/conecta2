@@ -192,7 +192,7 @@ export function FormServiceRequest({
             </h2>
             {loadStatus === 'success' && (
               <span className="px-2 py-0.5 bg-brand-teal/10 text-brand-teal text-[8px] font-black uppercase tracking-widest border border-brand-teal/20 rounded-md animate-pulse">
-                Sincronizado Conecta2Tec
+                Sincronizado VinculaTec
               </span>
             )}
           </div>
@@ -538,7 +538,7 @@ export function FormServiceRequest({
                 <Bot size={28} />
               </div>
               <h4 className={`text-xl font-black mb-4 tracking-tight ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>
-                Asistente de Validación Conecta2Tec
+                Asistente de Validación VinculaTec
               </h4>
               <p className={`text-xs leading-relaxed font-semibold mb-6 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
                 Rellena tus datos personales y escolares con total tranquilidad. Los datos protegidos en color azul han sido cargados directamente de los registros administrados por tu departamento escolar y son válidos para el Anexo XVII de tu Servicio Social institucional.

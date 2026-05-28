@@ -242,6 +242,18 @@ export const uploadStudentDocument = async (studentUid: string, docKey: string, 
   }
 };
 
+export const setProfileConfirmed = async (studentUid: string) => {
+  const path = `alumnos_tecnologico/${studentUid}`;
+  try {
+    const userRef = doc(db, "alumnos_tecnologico", studentUid);
+    await setDoc(userRef, {
+      perfil_confirmado: true
+    }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+};
+
 export interface FirestoreDependency {
   id?: string;
   name: string;

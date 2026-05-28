@@ -205,13 +205,32 @@ export function DependencyDetailsModal({
               >
                 Cerrar
               </button>
-              <button 
-                onClick={() => setShowConfirmation(true)}
-                className={`flex-1 sm:flex-none px-10 py-5 text-white font-black rounded-2xl transition-all active:scale-95 shadow-xl flex items-center justify-center gap-3 text-base group ${isDarkMode ? 'bg-brand-teal hover:bg-brand-teal/90 shadow-brand-teal/10' : 'bg-brand-teal hover:bg-brand-teal/90 shadow-brand-teal/20'}`}
-              >
-                <span>Solicitar Vacante</span>
-                <CheckCircle2 size={24} className="group-hover:scale-110 transition-transform" />
-              </button>
+              {user.id_dependencia === dependency.id ? (
+                <div className="flex items-center gap-2.5 px-6 py-4.5 bg-[#00c49f]/10 border border-[#00c49f]/30 text-[#00c49f] rounded-2xl font-black text-sm uppercase tracking-wider">
+                  <CheckCircle2 size={18} />
+                  <span>Tu Selección Activa</span>
+                </div>
+              ) : (user.id_dependencia) ? (
+                <div className="flex flex-col sm:items-end gap-1">
+                  <button 
+                    disabled
+                    className="px-8 py-5 bg-neutral-100 dark:bg-[#1a2333] border border-neutral-200 dark:border-neutral-800 text-neutral-400 dark:text-neutral-500 rounded-2xl font-black text-xs uppercase tracking-widest cursor-not-allowed"
+                  >
+                    Selección Bloqueada
+                  </button>
+                  <p className="text-[10px] font-bold text-brand-orange uppercase tracking-wider text-right">
+                    Ya registraste otra dependencia
+                  </p>
+                </div>
+              ) : (
+                <button 
+                  onClick={() => setShowConfirmation(true)}
+                  className={`flex-1 sm:flex-none px-10 py-5 text-white font-black rounded-2xl transition-all active:scale-95 shadow-xl flex items-center justify-center gap-3 text-base group ${isDarkMode ? 'bg-brand-teal hover:bg-brand-teal/90 shadow-brand-teal/10' : 'bg-brand-teal hover:bg-brand-teal/90 shadow-brand-teal/20'}`}
+                >
+                  <span>Solicitar Vacante</span>
+                  <CheckCircle2 size={24} className="group-hover:scale-110 transition-transform" />
+                </button>
+              )}
             </div>
           </div>
         </motion.div>

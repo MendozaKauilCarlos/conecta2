@@ -1,17 +1,18 @@
-
 import React from 'react';
 import { motion } from 'motion/react';
-import { Building2, Info, ArrowUpRight, GraduationCap, HeartPulse, Users, Gavel } from 'lucide-react';
+import { Building2, Info, ArrowUpRight, GraduationCap, HeartPulse, Users, Gavel, CheckCircle2 } from 'lucide-react';
 import { Dependency } from '../../types';
 
 export function DependencyCard({ 
   dependency, 
   onViewDetails, 
-  isDarkMode 
+  isDarkMode,
+  isSelected
 }: { 
   dependency: Dependency, 
   onViewDetails: () => void,
-  isDarkMode?: boolean
+  isDarkMode?: boolean,
+  isSelected?: boolean
 }) {
   return (
     <motion.div 
@@ -20,23 +21,36 @@ export function DependencyCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       whileHover={{ y: -8 }}
-      className={`group rounded-[2.5rem] p-8 border shadow-sm hover:shadow-2xl transition-all duration-500 cursor-pointer relative overflow-hidden flex flex-col h-full ${isDarkMode ? 'bg-[#121926] border-neutral-800 hover:shadow-brand-teal/5' : 'bg-white border-neutral-100 hover:shadow-brand-teal/5'}`}
+      className={`group rounded-[2.5rem] p-8 border shadow-sm hover:shadow-2xl transition-all duration-500 cursor-pointer relative overflow-hidden flex flex-col h-full ${
+        isSelected
+          ? (isDarkMode ? 'bg-[#121926]/90 border-brand-teal shadow-lg shadow-brand-teal/5' : 'bg-white border-brand-teal shadow-lg shadow-brand-teal/5')
+          : (isDarkMode ? 'bg-[#121926] border-neutral-800 hover:shadow-brand-teal/5' : 'bg-white border-neutral-100 hover:shadow-brand-teal/5')
+      }`}
       onClick={onViewDetails}
     >
+      <div className={`absolute inset-0 bg-brand-teal/[0.02] pointer-events-none transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`} />
       <div className={`absolute top-0 right-0 w-32 h-32 bg-brand-teal/5 blur-[60px] -translate-y-12 translate-x-12 rounded-full transition-colors group-hover:bg-brand-teal/10`} />
       
       <div className="flex items-start justify-between mb-8 relative z-10">
         <div className={`w-14 h-14 rounded-2xl overflow-hidden border-2 shadow-inner group-hover:scale-110 transition-transform duration-500 ${isDarkMode ? 'bg-[#0a0f18] border-neutral-800' : 'bg-neutral-50 border-white'}`}>
           <img src={dependency.image} alt={dependency.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
         </div>
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
-          isDarkMode 
-            ? 'bg-neutral-900/50 border-neutral-800 text-neutral-500 group-hover:text-brand-teal' 
-            : 'bg-neutral-50 border-neutral-100 text-neutral-400 group-hover:text-brand-teal'
-        }`}>
-          <Info size={12} />
-          <span>Detalles</span>
-        </div>
+        
+        {isSelected ? (
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00c49f]/10 border border-[#00c49f]/30 text-[10px] font-black uppercase tracking-widest text-[#00c49f] animate-pulse">
+            <CheckCircle2 size={12} />
+            <span>Seleccionada</span>
+          </div>
+        ) : (
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
+            isDarkMode 
+              ? 'bg-neutral-900/50 border-neutral-800 text-neutral-500 group-hover:text-brand-teal' 
+              : 'bg-neutral-50 border-neutral-100 text-neutral-400 group-hover:text-brand-teal'
+          }`}>
+            <Info size={12} />
+            <span>Detalles</span>
+          </div>
+        )}
       </div>
 
       <div className="space-y-4 mb-10 flex-1 relative z-10">
@@ -57,7 +71,11 @@ export function DependencyCard({
           </span>
         </div>
         
-        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${isDarkMode ? 'bg-[#0a0f18] text-neutral-700 group-hover:bg-brand-teal group-hover:text-white' : 'bg-neutral-50 text-neutral-300 group-hover:bg-brand-blue group-hover:text-white group-hover:shadow-lg shadow-brand-blue/20'}`}>
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
+          isSelected
+            ? 'bg-[#00c49f] text-white shadow-md shadow-[#00c49f]/20'
+            : isDarkMode ? 'bg-[#0a0f18] text-neutral-700 group-hover:bg-brand-teal group-hover:text-white' : 'bg-neutral-50 text-neutral-300 group-hover:bg-brand-blue group-hover:text-white group-hover:shadow-lg shadow-brand-blue/20'
+        }`}>
           <ArrowUpRight size={20} />
         </div>
       </div>

@@ -67,7 +67,7 @@ export const Logo = ({ dark = false, isDarkMode = false, showText = true, classN
       {showText && (
         <div className="flex flex-col">
           <h1 className={`${textSize} font-black tracking-tight leading-none ${isLightOnDark ? 'text-white' : 'text-brand-blue'}`}>
-            Conecta<span className="text-brand-teal">2</span>
+            Vincula<span className="text-brand-teal">Tec</span>
           </h1>
           <div className="flex items-center gap-2 mt-1">
             <span className="h-[2px] w-4 bg-brand-orange"></span>

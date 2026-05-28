@@ -25,7 +25,11 @@ export function Dashboard({
 }) {
   const [activeTab, setActiveTab] = useState(user.role === 'admin' ? 'AdminCatalog' : 'Profile');
   const [selectedDependency, setSelectedDependency] = useState<Dependency | null>(null);
-  const [dataConfirmed, setDataConfirmed] = useState(true);
+  const [dataConfirmed, setDataConfirmed] = useState(() => {
+    if (user.role === 'admin') return true;
+    if (user.perfil_confirmado || user.id_dependencia) return true;
+    return false;
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -96,9 +100,25 @@ export function Dashboard({
           <ProfileView 
             user={user} 
             onUpdateProfile={onUpdateProfile}
-            onConfirmData={() => {
+            dataConfirmed={dataConfirmed}
+            onConfirmData={async () => {
               setDataConfirmed(true);
-              setActiveTab('Catalog');
+              try {
+                await dbService.setProfileConfirmed(user.id);
+                if (onUpdateProfile) {
+                  onUpdateProfile({
+                    ...user,
+                    perfil_confirmado: true
+                  });
+                }
+              } catch (e) {
+                console.error("Error when confirming profile: ", e);
+              }
+              if (!user.id_dependencia) {
+                setActiveTab('Catalog');
+              } else {
+                setActiveTab('Docs');
+              }
             }} 
             isDarkMode={isDarkMode} 
           />
@@ -108,7 +128,7 @@ export function Dashboard({
       case 'Docs':
         return <DocumentsView user={user} isDarkMode={isDarkMode} />;
       default:
-        return <ProfileView user={user} onConfirmData={() => setDataConfirmed(true)} isDarkMode={isDarkMode} />;
+        return <ProfileView user={user} dataConfirmed={dataConfirmed} onConfirmData={() => setDataConfirmed(true)} isDarkMode={isDarkMode} />;
     }
   };
 
