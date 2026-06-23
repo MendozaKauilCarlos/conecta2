@@ -1,18 +1,5 @@
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  setDoc, 
-  updateDoc, 
-  query, 
-  where, 
-  Timestamp,
-  type DocumentData
-} from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, auth, storage } from "../lib/firebase";
 import { Dependency } from "../types";
+import { DEPENDENCIES } from "../constants";
 
 export enum OperationType {
   CREATE = 'create',
@@ -23,91 +10,406 @@ export enum OperationType {
   WRITE = 'write',
 }
 
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-  }
+// LocalStorage Keys
+const STUDENTS_KEY = 'vinculatec_local_students';
+const DEPENDENCIES_KEY = 'vinculatec_local_dependencies';
+const SUBMISSIONS_KEY = 'vinculatec_local_submissions';
+
+// Dynamic DB State
+export let isMongoActive = false;
+
+if (typeof window !== 'undefined') {
+  fetch('/api/db-status')
+    .then(r => r.json())
+    .then(status => {
+      isMongoActive = !!status.connected;
+      console.log(`🔌 Database Service: MongoDB Active = ${isMongoActive}`);
+    })
+    .catch(e => {
+      console.log("🔌 Database Service running in pure LocalStorage mode (offline)");
+      isMongoActive = false;
+    });
 }
 
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-    },
-    operationType,
-    path
+// Reactive Pub/Sub Listeners
+type AlumnoListener = (data: any) => void;
+const listeners = new Set<() => void>();
+
+export const subscribeToAlumno = (studentUid: string, callback: AlumnoListener) => {
+  const checkAndNotify = async () => {
+    if (isMongoActive) {
+      try {
+        const res = await fetch(`/api/alumnos/${studentUid}`);
+        const json = await res.json();
+        if (json.success && json.data) {
+          const normalized = normalizeStudent({
+            ...json.data,
+            id: json.data._id || json.data.id,
+          });
+          callback(normalized);
+          return;
+        }
+      } catch (err) {
+        console.warn("Realtime sub fallback to local: ", err);
+      }
+    }
+
+    const list = getAlumnosTecnologicoSync();
+    const target = list.find((a: any) => a.id === studentUid);
+    if (target) {
+      callback(target);
+    }
+  };
+  
+  checkAndNotify();
+  
+  const listener = () => checkAndNotify();
+  listeners.add(listener);
+
+  const interval = setInterval(checkAndNotify, 4000);
+  
+  return () => {
+    listeners.delete(listener);
+    clearInterval(interval);
+  };
+};
+
+export const notifyDbChanged = () => {
+  listeners.forEach(l => {
+    try { l(); } catch (e) { console.error("Error notifying DB listener: ", e); }
+  });
+};
+
+// Initial Data Seed Helpers
+const initializeLocalStorageDb = () => {
+  if (typeof window === 'undefined') return;
+
+  // 1. Seed Dependencies
+  if (!localStorage.getItem(DEPENDENCIES_KEY)) {
+    // Generate initial loaded list of dependencies from default constants
+    // Let's add the specific SEDEQ/SEQ dependency from the user's Mongoose script
+    const initialDeps: Dependency[] = [
+      {
+        id: 'dep_seq',
+        name: 'Secretaría de Educación Pública de Quintana Roo',
+        category: 'Gobierno / Ayuntamiento',
+        subCategory: 'Virtualización Documental',
+        location: 'Av. Bonampak 31, 77500 Cancún, Q.R.',
+        vacancies: 9, // started with 10, reduced to 9 because Carlos is pre-assigned to it below
+        maxVacancies: 10,
+        status: 'Alta Disponibilidad',
+        image: 'https://firebasestorage.googleapis.com/v0/b/vinculatec-e7656.firebasestorage.app/o/logo_dependencias%2FSEQ.png?alt=media&token=37becfc2-d190-401e-8757-a30238bd5c29',
+        objective: 'Apoyar en la gestión de programas educativos y alfabetización en zonas vulnerables del municipio, promoviendo el desarrollo integral de los estudiantes.',
+        activities: [
+          'Captura y análisis de datos de aprovechamiento escolar.',
+          'Apoyo logístico en eventos culturales y ferias de ciencias.',
+          'Atención a padres de familia en ventanilla de servicios.'
+        ],
+        contact: {
+          titular: 'Lic. María Fernanda López',
+          phone: '9981563589',
+          email: 'prueba1@gmail.com',
+          schedule: 'Lunes - Viernes, 9:00 AM - 4:00 PM',
+          address: 'Av. Bonampak 31, 77500 Cancún, Q.R.',
+          puesto_titular: 'Directora General',
+          responsable_del_programa: 'Victor Hugo Molina',
+          modalidad: 'presencial',
+          ubicacion_maps: 'https://maps.app.goo.gl/38Kj45k53tY4jbBD7'
+        }
+      },
+      ...DEPENDENCIES
+    ];
+    localStorage.setItem(DEPENDENCIES_KEY, JSON.stringify(initialDeps));
   }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
+
+  // 2. Seed Students representing original users
+  if (!localStorage.getItem(STUDENTS_KEY)) {
+    const initialStudents = [
+      {
+        id: '2', // Carlos Mendoza (UID is 2 or 21530321)
+        apto: true,
+        id_dependencia: 'dep_seq',
+        dependencia_seleccionada: 'Secretaría de Educación Pública de Quintana Roo',
+        perfil_confirmado: false,
+        datos: {
+          nombre: 'Carlos Eduardo',
+          apellido_paterno: 'Mendoza',
+          apellido_materno: 'Kauil',
+          correo_institucional: 'l21530321@cancun.tecnm.mx',
+          fecha_nacimiento: '2003-05-17',
+          foto: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150',
+          no_control: '21530321',
+          nss: '56180315360',
+          sexo: 'Hombre',
+          telefono: '9981563528'
+        },
+        domicilio: {
+          calle: 'Majahua',
+          ciudad: 'Cancún',
+          colonia: 'Prado Norte',
+          cp: '77539',
+          estado: 'Quintana Roo'
+        },
+        status_academico: {
+          carrera: 'Ingeniería en Sistemas Computacionales',
+          creditos_aprobados: 220,
+          creditos_complementarios: 5,
+          creditos_total_carrera: 254,
+          periodo: '2026-05-01',
+          semestre: 10
+        },
+        kardex: {
+          estado_validacion: false,
+          fecha_subida: '2026-06-12T18:30:10.000Z',
+          observaciones: '',
+          url_documento: 'https://images.unsplash.com/photo-1586075010923-2dd4570fb338?auto=format&fit=crop&q=80&w=800'
+        },
+        carga_academica: {
+          estado_validacion: false,
+          fecha_subida: '2026-06-12T18:32:00.000Z',
+          observaciones: '',
+          url_documento: 'https://images.unsplash.com/photo-1586075010923-2dd4570fb338?auto=format&fit=crop&q=80&w=800'
+        },
+        vigencia_derechos: {
+          estado_validacion: false,
+          fecha_subida: '2026-06-12T18:34:11.000Z',
+          observaciones: '',
+          url_documento: 'https://images.unsplash.com/photo-1586075010923-2dd4570fb338?auto=format&fit=crop&q=80&w=800'
+        },
+        // initial opening docs empty or simulated
+        solicitud_servicio_social: null,
+        carta_compromiso: null,
+        carta_asignacion: null,
+        plan_de_trabajo: null,
+        tarjeta_control: null
+      },
+      {
+        id: '3', // Ana Sofía López
+        apto: true,
+        id_dependencia: '',
+        dependencia_seleccionada: '',
+        perfil_confirmado: false,
+        datos: {
+          nombre: 'Ana Sofía',
+          apellido_paterno: 'López',
+          apellido_materno: 'García',
+          correo_institucional: 'l19530001@cancun.tecnm.mx',
+          fecha_nacimiento: '1999-10-22',
+          foto: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150',
+          no_control: '19530001',
+          nss: '98765432109',
+          sexo: 'Femenino',
+          telefono: '(998) 987-6543'
+        },
+        domicilio: {
+          calle: 'Av. Las Américas, Mz 14, Lote 3',
+          ciudad: 'Cancún',
+          colonia: 'Residencial Las Américas',
+          cp: '77500',
+          estado: 'Quintana Roo'
+        },
+        status_academico: {
+          carrera: 'Arquitectura',
+          creditos_aprobados: 230,
+          creditos_complementarios: 6,
+          creditos_total_carrera: 270,
+          periodo: '2026-05-01',
+          semestre: 9
+        },
+        kardex: null,
+        carga_academica: null,
+        vigencia_derechos: null,
+      }
+    ];
+    localStorage.setItem(STUDENTS_KEY, JSON.stringify(initialStudents));
+  }
+};
+
+// Seed automatically on load
+initializeLocalStorageDb();
+
+// Sync getter functions
+export const normalizeStudent = (s: any): any => {
+  if (!s) return s;
+
+  // Resolve nested structures safely and keep top-level edits prioritized
+  const reqInit = s.requisitos_iniciales || {};
+  const docAper = s.documentos_apertura || {};
+
+  const kardex = s.kardex !== undefined ? s.kardex : (reqInit.kardex || null);
+  const carga_academica = s.carga_academica !== undefined ? s.carga_academica : (reqInit.carga_academica || null);
+  const constancia_vigencia_derechos = s.vigencia_derechos !== undefined ? s.vigencia_derechos : (reqInit.constancia_vigencia_derechos || s.constancia_vigencia_derechos || null);
+
+  const solicitud_servicio = s.solicitud_servicio_social !== undefined ? s.solicitud_servicio_social : (docAper.solicitud_servicio || s.solicitud_servicio || null);
+  const carta_compromiso = s.carta_compromiso !== undefined ? s.carta_compromiso : (docAper.carta_compromiso || null);
+  const carta_presentacion = s.carta_presentacion !== undefined ? s.carta_presentacion : (docAper.carta_presentacion || null);
+  const carta_asignacion = s.carta_asignacion !== undefined ? s.carta_asignacion : (docAper.carta_asignacion || null);
+  const plan_trabajo = s.plan_de_trabajo !== undefined ? s.plan_de_trabajo : (docAper.plan_trabajo || s.plan_trabajo || null);
+  const tarjeta_control = s.tarjeta_control !== undefined ? s.tarjeta_control : (docAper.tarjeta_control || null);
+
+  return {
+    ...s,
+    // Flat keys for backwards compatibility in all views
+    kardex,
+    carga_academica,
+    vigencia_derechos: constancia_vigencia_derechos,
+    solicitud_servicio_social: solicitud_servicio,
+    carta_compromiso,
+    carta_presentacion,
+    carta_asignacion,
+    plan_de_trabajo: plan_trabajo,
+    tarjeta_control,
+    
+    // Nested MongoDB schema matches
+    credenciales: s.credenciales || {
+      correo: s.datos?.correo_institucional || s.email || '',
+      password: s.password || 'TecCancun2026*'
+    },
+    requisitos_iniciales: {
+      kardex,
+      carga_academica,
+      constancia_vigencia_derechos
+    },
+    documentos_apertura: {
+      carta_asignacion,
+      carta_compromiso,
+      carta_presentacion,
+      plan_trabajo,
+      solicitud_servicio,
+      tarjeta_control
+    },
+    reportes_bimestrales: s.reportes_bimestrales || [
+      {
+        numero_reporte: 1,
+        auto_evaluacion: { calificacion: 0, estado_validacion: false, fecha_generacion: '2026-05-16T05:00:00Z', nivel_desempeño: '', observaciones: '', puntaje: [], url_plantilla: '', url_sellado: '' },
+        evaluacion_cualitativa: { calificacion: 0, estado_validacion: false, fecha_generacion: '2026-05-16T05:00:00Z', nivel_desempeño: '', observaciones: '', puntaje: [], url_plantilla: '', url_sellado: '' },
+        reporte_bimestral_doc: { estado_validacion: false, fecha_generacion: '2026-05-16T05:00:00Z', fecha_inicio: '2026-05-16T05:00:00Z', fecha_termina: '2026-05-16T05:00:00Z', hora_bimestre: 180, horas_acumuladas: 0, observaciones: '', resumen: '', url_plantilla: '', url_sellado: '' }
+      },
+      {
+        numero_reporte: 2,
+        auto_evaluacion: { calificacion: 0, estado_validacion: false, fecha_generacion: '2026-05-16T05:00:00Z', nivel_desempeño: '', observaciones: '', puntaje: [], url_plantilla: '', url_sellado: '' },
+        evaluacion_cualitativa: { calificacion: 0, estado_validacion: false, fecha_generacion: '2026-05-16T05:00:00Z', nivel_desempeño: '', observaciones: '', puntaje: [], url_plantilla: '', url_sellado: '' },
+        reporte_bimestral_doc: { estado_validacion: false, fecha_generacion: '2026-05-16T05:00:00Z', fecha_inicio: '2026-05-16T05:00:00Z', fecha_termina: '2026-05-16T05:00:00Z', hora_bimestre: 180, horas_acumuladas: 0, observaciones: '', resumen: '', url_plantilla: '', url_sellado: '' }
+      },
+      {
+        numero_reporte: 3,
+        auto_evaluacion: { calificacion: 0, estado_validacion: false, fecha_generacion: '2026-05-16T05:00:00Z', nivel_desempeño: '', observaciones: '', puntaje: [], url_plantilla: '', url_sellado: '' },
+        evaluacion_cualitativa: { calificacion: 0, estado_validacion: false, fecha_generacion: '2026-05-16T05:00:00Z', nivel_desempeño: '', observaciones: '', puntaje: [], url_plantilla: '', url_sellado: '' },
+        reporte_bimestral_doc: { estado_validacion: false, fecha_generacion: '2026-05-16T05:00:00Z', fecha_inicio: '2026-05-16T05:00:00Z', fecha_termina: '2026-05-16T05:00:00Z', hora_bimestre: 180, horas_acumuladas: 0, observaciones: '', resumen: '', url_plantilla: '', url_sellado: '' }
+      }
+    ],
+    cierre_servicio: s.cierre_servicio || {
+      evaluacion_desempeno_final: { calificacion: 0, estado_validacion: false, fecha_generacion: '2026-05-16T05:00:00Z', nivel_desempeno: '', observaciones: '', puntaje: [], url_plantilla: '', url_sellado: '' },
+      formato_final: { puntaje: [], calificacion: 0, comentarios_vinculacion: '', url_plantilla: '', url_sellado: '', observaciones: '', estado_validacion: false, fecha_generacion: null },
+      reporte_final: { url_documento: '', observaciones: '', estado_validacion: false, fecha_subida: null }
+    }
+  };
+};
+
+const getAlumnosTecnologicoSync = (): any[] => {
+  try {
+    const raw = localStorage.getItem(STUDENTS_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return list.map((student: any) => normalizeStudent(student));
+  } catch (e) {
+    console.error("Local DB read error: ", e);
+    return [];
+  }
+};
+
+const saveAlumnosTecnologicoSync = (list: any[]) => {
+  try {
+    const normalized = list.map((student: any) => normalizeStudent(student));
+    localStorage.setItem(STUDENTS_KEY, JSON.stringify(normalized));
+    notifyDbChanged();
+  } catch (e) {
+    console.error("Local DB write error: ", e);
+  }
+};
+
+const getDependenciesSync = (): Dependency[] => {
+  try {
+    const raw = localStorage.getItem(DEPENDENCIES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    console.error("Local DB read error: ", e);
+    return [];
+  }
+};
+
+const saveDependenciesSync = (list: Dependency[]) => {
+  try {
+    localStorage.setItem(DEPENDENCIES_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.error("Local DB write error: ", e);
+  }
+};
+
+// ------------------------- EXPORTED API OPERATIONS -------------------------
 
 export const getTemplates = async () => {
-  const path = 'templates';
-  try {
-    const querySnapshot = await getDocs(collection(db, path));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, path);
-  }
+  return [
+    { id: "10", name: "Solicitud de Servicio Social", code: "anexo_17" },
+    { id: "11", name: "Carta Compromiso", code: "carta_compromiso" },
+    { id: "15", name: "Carta de Presentación", code: "carta_presentacion" },
+    { id: "12", name: "Carta Asignación", code: "carta_asignacion" },
+    { id: "13", name: "Plan de Trabajo", code: "plan_trabajo" },
+    { id: "14", name: "Tarjeta de Control", code: "tarjeta_control" }
+  ];
 };
 
 export const getTemplate = async (templateId: string) => {
-  const path = `templates/${templateId}`;
-  try {
-    const docSnap = await getDoc(doc(db, "templates", templateId));
-    if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() };
-    }
-    return null;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, path);
-  }
+  const list = await getTemplates();
+  return list.find(t => t.id === templateId) || null;
 };
 
 export const submitDocument = async (templateId: string, data: any) => {
-  const path = 'submissions';
+  const currentUserId = JSON.parse(localStorage.getItem('vinculatec_current_user') || '{}')?.id || '2';
   try {
-    if (!auth.currentUser) throw new Error("User not authenticated");
-    
-    const submissionId = `${auth.currentUser.uid}_${templateId}_${Date.now()}`;
-    await setDoc(doc(db, "submissions", submissionId), {
-      userId: auth.currentUser.uid,
-      templateId,
-      data,
-      status: 'pending',
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now()
-    });
-    return submissionId;
+    // Determine target doc key
+    const templateKeyMap: Record<string, string> = {
+      '10': 'solicitud_servicio_social',
+      '11': 'carta_compromiso',
+      '15': 'carta_presentacion',
+      '12': 'carta_asignacion',
+      '13': 'plan_de_trabajo',
+      '14': 'tarjeta_control'
+    };
+    const docKey = templateKeyMap[templateId];
+    if (docKey) {
+      const students = getAlumnosTecnologicoSync();
+      const updated = students.map(student => {
+        if (student.id === currentUserId) {
+          return {
+            ...student,
+            [docKey]: {
+              estado_validacion: false,
+              fecha_subida: new Date().toISOString(),
+              observaciones: "",
+              url_documento: "https://images.unsplash.com/photo-1586075010923-2dd4570fb338?auto=format&fit=crop&q=80&w=800",
+              data: data
+            }
+          };
+        }
+        return student;
+      });
+      saveAlumnosTecnologicoSync(updated);
+    }
+    return `sub_${Date.now()}`;
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, path);
+    console.error(error);
+    throw new Error('Local Storage submission error');
   }
 };
 
 export const getUserSubmissions = async () => {
-  const path = 'submissions';
-  try {
-    if (!auth.currentUser) return [];
-    const q = query(collection(db, "submissions"), where("userId", "==", auth.currentUser.uid));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, path);
-  }
+  return [];
 };
 
 export const syncUserProfile = async (userData: any) => {
-  const path = `alumnos_tecnologico/${auth.currentUser?.uid}`;
   try {
-    if (!auth.currentUser) throw new Error("User not authenticated");
-    const userRef = doc(db, "alumnos_tecnologico", auth.currentUser.uid);
-    const userSnap = await getDoc(userRef);
+    const currentUserId = JSON.parse(localStorage.getItem('vinculatec_current_user') || '{}')?.id || '2';
+    const students = getAlumnosTecnologicoSync();
     
     let nombre = userData.name || "";
     let apellido_paterno = "";
@@ -122,431 +424,653 @@ export const syncUserProfile = async (userData: any) => {
       apellido_paterno = parts.pop() || "";
       nombre = parts[0];
     }
-    
-    const baseObj = userSnap.exists() ? userSnap.data() : { apto: false };
-    const originalDatos = baseObj.datos || {};
-    const originalDomicilio = baseObj.domicilio || {};
-    
-    let fechaNac = userData.birthDate || originalDatos.fecha_nacimiento || "";
-    if (typeof fechaNac === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fechaNac)) {
-      try {
-        const d = new Date(fechaNac + "T12:00:00");
-        if (!isNaN(d.getTime())) {
-          fechaNac = Timestamp.fromDate(d);
-        }
-      } catch (e) {}
-    }
-    
-    const updatedDatos = {
-      ...originalDatos,
-      nombre: nombre || originalDatos.nombre || "",
-      apellido_paterno: apellido_paterno || originalDatos.apellido_paterno || "",
-      apellido_materno: apellido_materno || originalDatos.apellido_materno || "",
-      no_control: userData.controlNumber || originalDatos.no_control || "",
-      correo_institucional: userData.email || originalDatos.correo_institucional || "",
-      fecha_nacimiento: fechaNac,
-      foto: userData.profilePicture || originalDatos.foto || "",
-      
-      // Update other fields using the Spanish structure to keep them synchronized with the Firestore document
-      semestre: userData.semester || originalDatos.semestre || "",
-      sexo: userData.gender || originalDatos.sexo || "",
-      genero: userData.gender || originalDatos.genero || "",
-      telefono: userData.phone || originalDatos.telefono || "",
-      nss: userData.nss || originalDatos.nss || ""
-    };
 
-    const updatedDomicilio = {
-      ...originalDomicilio,
-      calle: userData.address?.street || originalDomicilio.calle || "",
-      colonia: userData.address?.neighborhood || originalDomicilio.colonia || "",
-      cp: userData.address?.zipCode || originalDomicilio.cp || "",
-      ciudad: userData.address?.city || originalDomicilio.ciudad || "",
-      estado: userData.address?.state || originalDomicilio.estado || ""
-    };
-    
-    await setDoc(userRef, {
-      ...baseObj,
-      datos: updatedDatos,
-      domicilio: updatedDomicilio,
-      updatedAt: Timestamp.now()
-    }, { merge: true });
-    
+    const updated = students.map(s => {
+      if (s.id === currentUserId) {
+        const d = s.datos || {};
+        const dom = s.domicilio || {};
+        const statusAcad = s.status_academico || {};
+
+        return {
+          ...s,
+          datos: {
+            ...d,
+            nombre: nombre || d.nombre,
+            apellido_paterno: apellido_paterno || d.apellido_paterno,
+            apellido_materno: apellido_materno || d.apellido_materno,
+            no_control: userData.controlNumber || d.no_control,
+            correo_institucional: userData.email || d.correo_institucional,
+            fecha_nacimiento: userData.birthDate || d.fecha_nacimiento,
+            foto: userData.profilePicture || d.foto,
+            sexo: userData.gender || d.sexo,
+            genero: userData.gender || d.genero,
+            telefono: userData.phone || d.telefono,
+            nss: userData.nss || d.nss
+          },
+          domicilio: {
+            ...dom,
+            calle: userData.address?.street || dom.calle,
+            colonia: userData.address?.neighborhood || dom.colonia,
+            cp: userData.address?.zipCode || dom.cp,
+            ciudad: userData.address?.city || dom.ciudad,
+            estado: userData.address?.state || dom.estado
+          },
+          status_academico: {
+            ...statusAcad,
+            semestre: typeof userData.semester === 'string' ? parseInt(userData.semester) || statusAcad.semestre : (userData.semester || statusAcad.semestre)
+          }
+        };
+      }
+      return s;
+    });
+
+    saveAlumnosTecnologicoSync(updated);
+
+    // Sync active session user info
+    const sessionUser = JSON.parse(localStorage.getItem('vinculatec_current_user') || '{}');
+    if (sessionUser && sessionUser.id === currentUserId) {
+      const refreshedTarget = updated.find(a => a.id === currentUserId);
+      const combined = { ...sessionUser, ...userData, ...refreshedTarget };
+      localStorage.setItem('vinculatec_current_user', JSON.stringify(combined));
+    }
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    console.error("Local Storage User Profile sync error: ", error);
   }
 };
 
 export const uploadProfilePicture = async (file: File): Promise<string> => {
-  if (!auth.currentUser) throw new Error("User not authenticated");
-  const path = `alumnos_tecnologico_fotos/${auth.currentUser.uid}`;
-  try {
-    const fileExtension = file.name.split('.').pop() || 'jpg';
-    // Store in the specified folder "alumnos_tecnologico_fotos" as folders inside Firebase Storage
-    const filePath = `alumnos_tecnologico_fotos/${auth.currentUser.uid}_profile.${fileExtension}`;
-    const storageRef = ref(storage, filePath);
-    
-    const snapshot = await uploadBytes(storageRef, file);
-    const downloadUrl = await getDownloadURL(snapshot.ref);
-    return downloadUrl;
-  } catch (error) {
-    console.error("Error uploading to Firebase Storage: ", error);
-    throw error;
-  }
+  // Return standard picture representation mock
+  return URL.createObjectURL(file);
 };
 
 export const uploadDependencyLogo = async (file: File): Promise<string> => {
+  return URL.createObjectURL(file);
+};
+
+export const uploadStudentDocument = async (studentUid: string, docKey: string, file: File): Promise<string> => {
+  const mockFileUrl = `https://images.unsplash.com/photo-1586075010923-2dd4570fb338?auto=format&fit=crop&q=80&w=800&filename=${encodeURIComponent(file.name)}`;
+  
+  if (isMongoActive) {
+    try {
+      const student = await getAlumnoCompleto(studentUid);
+      if (student) {
+        const updatePayload: any = {};
+        
+        if (['kardex', 'carga_academica', 'vigencia_derechos'].includes(docKey)) {
+          const reqKey = docKey === 'vigencia_derechos' ? 'constancia_vigencia_derechos' : docKey;
+          updatePayload[`requisitos_iniciales.${reqKey}`] = {
+            estado_validacion: false,
+            fecha_subida: new Date().toISOString(),
+            observaciones: "",
+            url_documento: mockFileUrl
+          };
+        } else {
+          const mapKey: any = {
+            'solicitud_servicio_social': 'solicitud_servicio',
+            'carta_compromiso': 'carta_compromiso',
+            'carta_presentacion': 'carta_presentacion',
+            'carta_asignacion': 'carta_asignacion',
+            'plan_de_trabajo': 'plan_trabajo',
+            'tarjeta_control': 'tarjeta_control'
+          };
+          const apertureKey = mapKey[docKey] || docKey;
+          updatePayload[`documentos_apertura.${apertureKey}`] = {
+            estado_validacion: false,
+            fecha_subida: new Date().toISOString(),
+            observaciones: "",
+            url_documento: mockFileUrl,
+            url_modificado: mockFileUrl
+          };
+        }
+
+        updatePayload[docKey] = {
+          estado_validacion: false,
+          fecha_subida: new Date().toISOString(),
+          observaciones: "",
+          url_documento: mockFileUrl
+        };
+
+        await updateAlumnoCompleto(studentUid, updatePayload);
+        return mockFileUrl;
+      }
+    } catch (e) {
+      console.error("MongoDB upload document error, falling back: ", e);
+    }
+  }
+
   try {
-    const fileExtension = file.name.split('.').pop() || 'png';
-    const filePath = `logo_dependencias/${Date.now()}_logo.${fileExtension}`;
-    const storageRef = ref(storage, filePath);
+    const list = getAlumnosTecnologicoSync();
     
-    const snapshot = await uploadBytes(storageRef, file);
-    const downloadUrl = await getDownloadURL(snapshot.ref);
-    return downloadUrl;
+    const updated = list.map(student => {
+      if (student.id === studentUid) {
+        return {
+          ...student,
+          [docKey]: {
+            estado_validacion: false,
+            fecha_subida: new Date().toISOString(),
+            observaciones: "",
+            url_documento: mockFileUrl
+          }
+        };
+      }
+      return student;
+    });
+    
+    saveAlumnosTecnologicoSync(updated);
+    return mockFileUrl;
   } catch (error) {
-    console.error("Error uploading dependency logo to Firebase Storage: ", error);
+    console.error("Local Storage Doc upload error: ", error);
     throw error;
   }
 };
 
-export const uploadStudentDocument = async (studentUid: string, docKey: string, file: File): Promise<string> => {
-  const path = `alumnos_tecnologico/${studentUid}`;
-  try {
-    const fileExtension = file.name.split('.').pop() || 'pdf';
-    const filePath = `alumnos_tecnologico_documentos/${studentUid}/${docKey}_${Date.now()}.${fileExtension}`;
-    
-    let downloadUrl = "";
+export const uploadBimestralDocument = async (
+  studentUid: string,
+  reportNo: number,
+  subKey: 'reporte_bimestral_doc' | 'evaluacion_cualitativa' | 'auto_evaluacion',
+  file: File
+): Promise<string> => {
+  const mockFileUrl = `https://images.unsplash.com/photo-1586075010923-2dd4570fb338?auto=format&fit=crop&q=80&w=800&filename=${encodeURIComponent(file.name)}`;
+  
+  if (isMongoActive) {
     try {
-      const storageRef = ref(storage, filePath);
-      const snapshot = await uploadBytes(storageRef, file);
-      downloadUrl = await getDownloadURL(snapshot.ref);
-    } catch (e) {
-      console.warn("Firebase Storage unavailable; fallback to simulated URL", e);
-      downloadUrl = `https://images.unsplash.com/photo-1586075010923-2dd4570fb338?auto=format&fit=crop&q=80&w=800&filename=${encodeURIComponent(file.name)}`;
-    }
-
-    const docRef = doc(db, "alumnos_tecnologico", studentUid);
-    await setDoc(docRef, {
-      [docKey]: {
-        estado_validacion: false,
-        fecha_subida: Timestamp.now(),
-        observaciones: "",
-        url_documento: downloadUrl
+      const student = await getAlumnoCompleto(studentUid);
+      if (student) {
+        const reports = student.reportes_bimestrales || [];
+        const index = reports.findIndex((r: any) => r.numero_reporte === reportNo);
+        
+        if (index !== -1) {
+          const path = `reportes_bimestrales.${index}.${subKey}`;
+          const currentSub = reports[index][subKey] || {};
+          
+          const updatePayload = {
+            [path]: {
+              ...currentSub,
+              estado_validacion: false,
+              fecha_generacion: new Date().toISOString(),
+              fecha_subida: new Date().toISOString(),
+              observaciones: "",
+              url_sellado: mockFileUrl,
+              url_documento: mockFileUrl
+            }
+          };
+          
+          await updateAlumnoCompleto(studentUid, updatePayload);
+          return mockFileUrl;
+        }
       }
-    }, { merge: true });
+    } catch (e) {
+      console.error("MongoDB upload bimestral document error, falling back: ", e);
+    }
+  }
 
-    return downloadUrl;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-    throw error;
+  try {
+    const list = getAlumnosTecnologicoSync();
+    const updated = list.map(student => {
+      if (student.id === studentUid) {
+        const reports = student.reportes_bimestrales || [];
+        const updatedReports = reports.map((r: any) => {
+          if (r.numero_reporte === reportNo) {
+            return {
+              ...r,
+              [subKey]: {
+                ...(r[subKey] || {}),
+                estado_validacion: false,
+                fecha_generacion: new Date().toISOString(),
+                fecha_subida: new Date().toISOString(),
+                observaciones: "",
+                url_sellado: mockFileUrl,
+                url_documento: mockFileUrl
+              }
+            };
+          }
+          return r;
+        });
+        return {
+          ...student,
+          reportes_bimestrales: updatedReports
+        };
+      }
+      return student;
+    });
+
+    saveAlumnosTecnologicoSync(updated);
+    return mockFileUrl;
+  } catch (err) {
+    console.error("Error uploading bimestral doc in local mode:", err);
+    throw err;
+  }
+};
+
+export const validateBimestralDocument = async (
+  studentUid: string,
+  reportNo: number,
+  subKey: 'reporte_bimestral_doc' | 'evaluacion_cualitativa' | 'auto_evaluacion',
+  approved: boolean,
+  observaciones: string = ""
+): Promise<void> => {
+  if (isMongoActive) {
+    try {
+      const student = await getAlumnoCompleto(studentUid);
+      if (student) {
+        const reports = student.reportes_bimestrales || [];
+        const index = reports.findIndex((r: any) => r.numero_reporte === reportNo);
+        if (index !== -1) {
+          const path = `reportes_bimestrales.${index}.${subKey}`;
+          const currentSub = reports[index][subKey] || {};
+          const updatePayload = {
+            [path]: {
+              ...currentSub,
+              estado_validacion: approved,
+              observaciones: observaciones,
+              fecha_validacion: new Date().toISOString()
+            }
+          };
+          await updateAlumnoCompleto(studentUid, updatePayload);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error("MongoDB validate bimestral document error: ", e);
+    }
+  }
+
+  try {
+    const list = getAlumnosTecnologicoSync();
+    const updated = list.map(student => {
+      if (student.id === studentUid) {
+        const reports = student.reportes_bimestrales || [];
+        const updatedReports = reports.map((r: any) => {
+          if (r.numero_reporte === reportNo) {
+            return {
+              ...r,
+              [subKey]: {
+                ...(r[subKey] || {}),
+                estado_validacion: approved,
+                observaciones: observaciones,
+                fecha_validacion: new Date().toISOString()
+              }
+            };
+          }
+          return r;
+        });
+        return {
+          ...student,
+          reportes_bimestrales: updatedReports
+        };
+      }
+      return student;
+    });
+    saveAlumnosTecnologicoSync(updated);
+  } catch (err) {
+    console.error("Error validating bimestral document:", err);
+  }
+};
+
+export const uploadCierreDocument = async (
+  studentUid: string,
+  subKey: 'evaluacion_desempeno_final' | 'formato_final' | 'reporte_final',
+  file: File
+): Promise<string> => {
+  const mockFileUrl = `https://images.unsplash.com/photo-1586075010923-2dd4570fb338?auto=format&fit=crop&q=80&w=800&filename=${encodeURIComponent(file.name)}`;
+  
+  if (isMongoActive) {
+    try {
+      const student = await getAlumnoCompleto(studentUid);
+      if (student) {
+        const currentCierre = student.cierre_servicio || {};
+        const currentSub = currentCierre[subKey] || {};
+        const path = `cierre_servicio.${subKey}`;
+        
+        const updatePayload = {
+          [path]: {
+            ...currentSub,
+            estado_validacion: false,
+            fecha_generacion: new Date().toISOString(),
+            fecha_subida: new Date().toISOString(),
+            observaciones: "",
+            url_documento: mockFileUrl,
+            url_sellado: mockFileUrl
+          }
+        };
+        
+        await updateAlumnoCompleto(studentUid, updatePayload);
+        return mockFileUrl;
+      }
+    } catch (e) {
+      console.error("MongoDB upload closure document error, falling back: ", e);
+    }
+  }
+
+  try {
+    const list = getAlumnosTecnologicoSync();
+    const updated = list.map(student => {
+      if (student.id === studentUid) {
+        const currentCierre = student.cierre_servicio || {};
+        const updatedCierre = {
+          ...currentCierre,
+          [subKey]: {
+            ...(currentCierre[subKey] || {}),
+            estado_validacion: false,
+            fecha_generacion: new Date().toISOString(),
+            fecha_subida: new Date().toISOString(),
+            observaciones: "",
+            url_documento: mockFileUrl,
+            url_sellado: mockFileUrl
+          }
+        };
+        return {
+          ...student,
+          cierre_servicio: updatedCierre
+        };
+      }
+      return student;
+    });
+
+    saveAlumnosTecnologicoSync(updated);
+    return mockFileUrl;
+  } catch (err) {
+    console.error("Error uploading closure doc in local mode:", err);
+    throw err;
+  }
+};
+
+export const validateCierreDocument = async (
+  studentUid: string,
+  subKey: 'evaluacion_desempeno_final' | 'formato_final' | 'reporte_final',
+  approved: boolean,
+  observaciones: string = ""
+): Promise<void> => {
+  if (isMongoActive) {
+    try {
+      const student = await getAlumnoCompleto(studentUid);
+      if (student) {
+        const currentCierre = student.cierre_servicio || {};
+        const currentSub = currentCierre[subKey] || {};
+        const path = `cierre_servicio.${subKey}`;
+        const updatePayload = {
+          [path]: {
+            ...currentSub,
+            estado_validacion: approved,
+            observaciones: observaciones,
+            fecha_validacion: new Date().toISOString()
+          }
+        };
+        await updateAlumnoCompleto(studentUid, updatePayload);
+        return;
+      }
+    } catch (e) {
+      console.error("MongoDB validate closure document error: ", e);
+    }
+  }
+
+  try {
+    const list = getAlumnosTecnologicoSync();
+    const updated = list.map(student => {
+      if (student.id === studentUid) {
+        const currentCierre = student.cierre_servicio || {};
+        const updatedCierre = {
+          ...currentCierre,
+          [subKey]: {
+            ...(currentCierre[subKey] || {}),
+            estado_validacion: approved,
+            observaciones: observaciones,
+            fecha_validacion: new Date().toISOString()
+          }
+        };
+        return {
+          ...student,
+          cierre_servicio: updatedCierre
+        };
+      }
+      return student;
+    });
+    saveAlumnosTecnologicoSync(updated);
+  } catch (err) {
+    console.error("Error validating closure document:", err);
   }
 };
 
 export const setProfileConfirmed = async (studentUid: string) => {
-  const path = `alumnos_tecnologico/${studentUid}`;
   try {
-    const userRef = doc(db, "alumnos_tecnologico", studentUid);
-    await setDoc(userRef, {
-      perfil_confirmado: true
-    }, { merge: true });
+    const list = getAlumnosTecnologicoSync();
+    const updated = list.map(s => {
+      if (s.id === studentUid) {
+        return { ...s, perfil_confirmado: true };
+      }
+      return s;
+    });
+    saveAlumnosTecnologicoSync(updated);
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    console.error("Local Storage profile confirmation error: ", error);
   }
 };
 
-export interface FirestoreDependency {
-  id?: string;
-  name: string;
-  category: string;
-  subCategory: string;
-  location: string;
-  vacancies: number;
-  maxVacancies: number;
-  status: any;
-  image: string;
-  objective?: string;
-  activities?: string[];
-  contact?: {
-    titular: string;
-    phone: string;
-    email: string;
-    schedule: string;
-    address: string;
-  };
-}
-
 export const getDependencies = async (): Promise<Dependency[]> => {
-  const path = 'dependencias';
-  try {
-    const querySnapshot = await getDocs(collection(db, path));
-    if (querySnapshot.empty) {
-      return [];
+  if (isMongoActive) {
+    try {
+      const res = await fetch('/api/dependencias');
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        return json.data.map((dep: any) => {
+          const vacancies = typeof dep.vacantes === 'number' ? dep.vacantes : 0;
+          return {
+            id: dep._id || dep.id,
+            name: (dep.nombre_dependencia || 'DEPENDENCIA').toUpperCase(),
+            category: dep.sector === 'publico' ? 'Gobierno / Ayuntamiento' : 'Iniciativa Privada',
+            subCategory: dep.nombre_programa || 'Servicio Social',
+            location: dep.ubicacion?.domicilio_dependencia || 'Cancún',
+            vacancies: vacancies,
+            maxVacancies: dep.vacantes || 10,
+            status: (vacancies > 4 ? 'Alta Disponibilidad' : (vacancies > 0 ? 'Lugares Limitados' : 'Disponible')) as any,
+            image: dep.logo || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=300',
+            oculta: dep.oculta || false,
+            objective: dep.objetivo || '',
+            activities: dep.actividades || [],
+            contact: {
+              titular: dep.contacto?.nombre_titular || '',
+              phone: dep.contacto?.telefono || '',
+              email: dep.contacto?.correo || '',
+              schedule: `${dep.horarios_servicio?.dias || 'Lunes - Viernes'}, ${dep.horarios_servicio?.horas || '9:00 AM - 4:00 PM'}`,
+              address: dep.ubicacion?.domicilio_dependencia || '',
+              puesto_titular: dep.contacto?.puesto_titular || '',
+              responsable_del_programa: dep.contacto?.responsable_del_programa || '',
+              modalidad: dep.modalidad || 'presencial',
+              ubicacion_maps: dep.ubicacion?.ubicacion_maps || ''
+            }
+          };
+        });
+      }
+    } catch (e) {
+      console.warn("Fallback dependencias error API, reading from local:", e);
     }
-    return querySnapshot.docs.map(doc => {
-      const docData = doc.data();
-      // Support both a nested capital 'Datos' map (as standard in user's DB), lowercase 'datos' map, or direct root-level fields
-      const data = docData.Datos || docData.datos || docData;
-      
-      const isInternal = data.interno === true;
-      let category = data.category || data.categoria || data.sector || '';
-      
-      if (!category) {
-        if (isInternal) {
-          category = 'Internos';
-        } else {
-          category = 'Gobierno / Ayuntamiento'; // default
-        }
-      } else if (category === 'publico' || category === 'público') {
-        category = 'Gobierno / Ayuntamiento';
-      } else if (category === 'interno') {
-        category = 'Internos';
-      } else if (category === 'social') {
-        category = 'Asociaciones Civiles';
-      } else if (category === 'salud') {
-        category = 'Salud / Hospitales';
-      }
-
-      const activities = data.actividades || data.activities || [];
-      const vacancies = typeof data.vacantes === 'number' ? data.vacantes : (typeof data.vacancies === 'number' ? data.vacancies : 0);
-      const maxVacancies = typeof data.maxVacancies === 'number' ? data.maxVacancies : (typeof data.max_vacantes === 'number' ? data.max_vacantes : Math.max(10, vacancies));
-
-      const rawUbicacion = data.ubicacion || {};
-      const address = typeof rawUbicacion === 'object' ? (rawUbicacion.domicilio_dependencia || '') : (data.location || '');
-      const mapsUrl = typeof rawUbicacion === 'object' ? (rawUbicacion.ubicacion_maps || '') : '';
-
-      const rawContact = data.contacto || data.contact || {};
-      const rawHorarios = data.horarios_servicio || data.horarios || {};
-      
-      let scheduleStr = '';
-      if (rawHorarios.dias && rawHorarios.horas) {
-        scheduleStr = `${rawHorarios.dias} - ${rawHorarios.horas}`;
-      } else if (rawHorarios.dias || rawHorarios.horas) {
-        scheduleStr = rawHorarios.dias || rawHorarios.horas || '';
-      } else if (rawContact.schedule) {
-        scheduleStr = rawContact.schedule;
-      }
-
-      return {
-        id: doc.id,
-        name: data.nombre_dependencia || data.name || data.nombre || '',
-        category: category,
-        subCategory: data.nombre_programa || data.subCategory || data.subcategoria || '',
-        location: address || data.location || 'Cancún, Q.R.',
-        vacancies: vacancies,
-        maxVacancies: maxVacancies,
-        status: vacancies > 4 ? 'Alta Disponibilidad' : (vacancies > 0 ? 'Lugares Limitados' : 'Disponible'),
-        image: data.logo || data.image || data.imagen || 'https://images.unsplash.com/photo-1523050335392-93851179ae22?auto=format&fit=crop&q=80&w=200',
-        objective: data.objetivo || data.objective || '',
-        activities: Array.isArray(activities) ? activities : [],
-        contact: {
-          titular: rawContact.nombre_titular || rawContact.titular || '',
-          phone: rawContact.telefono || rawContact.phone || '',
-          email: rawContact.correo || rawContact.email || '',
-          schedule: scheduleStr || 'Lunes a Viernes de 9:00 AM a 4:00 PM',
-          address: address || rawContact.address || 'Cancún, Q.R.',
-          puesto_titular: rawContact.puesto_titular || '',
-          responsable_del_programa: rawContact.responsable_del_programa || '',
-          modalidad: data.modalidad || 'presencial',
-          ubicacion_maps: mapsUrl
-        }
-      } as Dependency;
-    });
-  } catch (error) {
-    console.error("Error retrieving dependencies from database: ", error);
-    return [];
   }
+  return getDependenciesSync();
 };
 
 export const getDependency = async (id: string): Promise<Dependency | null> => {
-  const path = `dependencias/${id}`;
-  try {
-    const docSnap = await getDoc(doc(db, "dependencias", id));
-    if (!docSnap.exists()) {
-      return null;
-    }
-    const docData = docSnap.data();
-    const data = docData.Datos || docData.datos || docData;
-    
-    const isInternal = data.interno === true;
-    let category = data.category || data.categoria || data.sector || '';
-    
-    if (!category) {
-      if (isInternal) {
-        category = 'Internos';
-      } else {
-        category = 'Gobierno / Ayuntamiento';
+  if (isMongoActive) {
+    try {
+      const res = await fetch(`/api/dependencias/${id}`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        const dep = json.data;
+        const vacancies = typeof dep.vacantes === 'number' ? dep.vacantes : 0;
+        return {
+          id: dep._id || dep.id,
+          name: (dep.nombre_dependencia || 'DEPENDENCIA').toUpperCase(),
+          category: dep.sector === 'publico' ? 'Gobierno / Ayuntamiento' : 'Iniciativa Privada',
+          subCategory: dep.nombre_programa || 'Servicio Social',
+          location: dep.ubicacion?.domicilio_dependencia || 'Cancún',
+          vacancies: vacancies,
+          maxVacancies: dep.vacantes || 10,
+          status: (vacancies > 4 ? 'Alta Disponibilidad' : (vacancies > 0 ? 'Lugares Limitados' : 'Disponible')) as any,
+          image: dep.logo || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=300',
+          oculta: dep.oculta || false,
+          objective: dep.objetivo || '',
+          activities: dep.actividades || [],
+          contact: {
+            titular: dep.contacto?.nombre_titular || '',
+            phone: dep.contacto?.telefono || '',
+            email: dep.contacto?.correo || '',
+            schedule: `${dep.horarios_servicio?.dias || 'Lunes - Viernes'}, ${dep.horarios_servicio?.horas || '9:00 AM - 4:00 PM'}`,
+            address: dep.ubicacion?.domicilio_dependencia || '',
+            puesto_titular: dep.contacto?.puesto_titular || '',
+            responsable_del_programa: dep.contacto?.responsable_del_programa || '',
+            modalidad: dep.modalidad || 'presencial',
+            ubicacion_maps: dep.ubicacion?.ubicacion_maps || ''
+          }
+        };
       }
-    } else if (category === 'publico' || category === 'público') {
-      category = 'Gobierno / Ayuntamiento';
-    } else if (category === 'interno') {
-      category = 'Internos';
-    } else if (category === 'social') {
-      category = 'Asociaciones Civiles';
-    } else if (category === 'salud') {
-      category = 'Salud / Hospitales';
+    } catch (e) {
+      console.warn("Error getting dependency from MongoDB, falling back: ", e);
     }
-
-    const activities = data.actividades || data.activities || [];
-    const vacancies = typeof data.vacantes === 'number' ? data.vacantes : (typeof data.vacancies === 'number' ? data.vacancies : 0);
-    const maxVacancies = typeof data.maxVacancies === 'number' ? data.maxVacancies : (typeof data.max_vacantes === 'number' ? data.max_vacantes : Math.max(10, vacancies));
-
-    const rawUbicacion = data.ubicacion || {};
-    const address = typeof rawUbicacion === 'object' ? (rawUbicacion.domicilio_dependencia || '') : (data.location || '');
-    const mapsUrl = typeof rawUbicacion === 'object' ? (rawUbicacion.ubicacion_maps || '') : '';
-
-    const rawContact = data.contacto || data.contact || {};
-    const rawHorarios = data.horarios_servicio || data.horarios || {};
-    
-    let scheduleStr = '';
-    if (rawHorarios.dias && rawHorarios.horas) {
-      scheduleStr = `${rawHorarios.dias} - ${rawHorarios.horas}`;
-    } else if (rawHorarios.dias || rawHorarios.horas) {
-      scheduleStr = rawHorarios.dias || rawHorarios.horas || '';
-    } else if (rawContact.schedule) {
-      scheduleStr = rawContact.schedule;
-    }
-
-    return {
-      id: docSnap.id,
-      name: data.nombre_dependencia || data.name || data.nombre || '',
-      category: category,
-      subCategory: data.nombre_programa || data.subCategory || data.subcategoria || '',
-      location: address || data.location || 'Cancún, Q.R.',
-      vacancies: vacancies,
-      maxVacancies: maxVacancies,
-      status: vacancies > 4 ? 'Alta Disponibilidad' : (vacancies > 0 ? 'Lugares Limitados' : 'Disponible'),
-      image: data.logo || data.image || data.imagen || 'https://images.unsplash.com/photo-1523050335392-93851179ae22?auto=format&fit=crop&q=80&w=200',
-      objective: data.objetivo || data.objective || '',
-      activities: Array.isArray(activities) ? activities : [],
-      contact: {
-        titular: rawContact.nombre_titular || rawContact.titular || '',
-        phone: rawContact.telefono || rawContact.phone || '',
-        email: rawContact.correo || rawContact.email || '',
-        schedule: scheduleStr || 'Lunes a Viernes de 9:00 AM a 4:00 PM',
-        address: address || rawContact.address || 'Cancún, Q.R.',
-        puesto_titular: rawContact.puesto_titular || '',
-        responsable_del_programa: rawContact.responsable_del_programa || '',
-        modalidad: data.modalidad || 'presencial',
-        ubicacion_maps: mapsUrl
-      }
-    } as Dependency;
-  } catch (error) {
-    console.error("Error retrieving single dependency from database: ", error);
-    return null;
   }
+  const list = getDependenciesSync();
+  return list.find(d => d.id === id) || null;
 };
 
 export const saveDependency = async (dep: Omit<Dependency, 'id'> & { id?: string }): Promise<string> => {
-  const path = 'dependencias';
-  try {
-    const docId = dep.id || `dep_${Date.now()}`;
-    const docRef = doc(db, "dependencias", docId);
-    
-    // Check if there is an existing document so we don't wipe out other fields
-    let existingDatos: any = {};
-    let saveWithKey = 'Datos'; // Default key name
-    
+  if (isMongoActive) {
     try {
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        const existingData = snap.data();
-        if (existingData.datos) {
-          existingDatos = existingData.datos;
-          saveWithKey = 'datos';
-        } else if (existingData.Datos) {
-          existingDatos = existingData.Datos;
-          saveWithKey = 'Datos';
+      const mongooseDep = {
+        id: dep.id,
+        _id: dep.id,
+        activo: dep.status !== 'Disponible',
+        oculta: dep.oculta || false,
+        interno: false,
+        modalidad: dep.contact?.modalidad || 'presencial',
+        nombre_dependencia: (dep.name || '').toLowerCase(),
+        nombre_programa: dep.subCategory || '',
+        objetivo: dep.objective || '',
+        sector: dep.category?.includes('Gobierno') ? 'publico' : 'privado',
+        vacantes: dep.vacancies,
+        logo: dep.image || '',
+        actividades: dep.activities || [],
+        contacto: {
+          correo: dep.contact?.email || '',
+          nombre_titular: dep.contact?.titular || '',
+          puesto_titular: dep.contact?.puesto_titular || '',
+          responsable_del_programa: dep.contact?.responsable_del_programa || '',
+          telefono: dep.contact?.phone || ''
+        },
+        horarios_servicio: {
+          dias: dep.contact?.schedule?.split(',')[0]?.trim() || 'Lunes - Viernes',
+          horas: dep.contact?.schedule?.split(',')[1]?.trim() || '9:00 AM - 4:00 PM'
+        },
+        ubicacion: {
+          domicilio_dependencia: dep.contact?.address || dep.location || '',
+          ubicacion_maps: dep.contact?.ubicacion_maps || ''
         }
-      }
-    } catch (e) {}
+      };
 
-    // Map the UI category to the appropriate sector database string
-    let sectorVal = 'publico';
-    if (dep.category === 'Internos') {
-      sectorVal = 'interno';
-    } else if (dep.category === 'Asociaciones Civiles') {
-      sectorVal = 'social';
-    } else if (dep.category === 'Salud / Hospitales') {
-      sectorVal = 'salud';
+      const res = await fetch('/api/dependencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mongooseDep)
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        return json.data._id || json.data.id;
+      }
+    } catch (e) {
+      console.warn("Error saving dependency to MongoDB, falling back: ", e);
+    }
+  }
+
+  try {
+    const list = getDependenciesSync();
+    const docId = dep.id || `dep_${Date.now()}`;
+    
+    const existingIndex = list.findIndex(d => d.id === docId);
+    
+    const newDep: Dependency = {
+      ...dep,
+      id: docId,
+      status: dep.vacancies > 4 ? 'Alta Disponibilidad' : (dep.vacancies > 0 ? 'Lugares Limitados' : 'Disponible')
+    };
+
+    if (existingIndex !== -1) {
+      list[existingIndex] = newDep;
+    } else {
+      list.push(newDep);
     }
 
-    const scheduleParts = dep.contact?.schedule?.split(' - ') || [];
-    const diasVal = scheduleParts[0] || 'lunes - viernes';
-    const horasVal = scheduleParts[1] || '9:00 AM - 4:00 PM';
-
-    // Form strict map field according to the DB schema
-    const customDatos = {
-      ...existingDatos,
-      actividades: dep.activities || [],
-      activo: true,
-      contacto: {
-        correo: dep.contact?.email || '',
-        nombre_titular: dep.contact?.titular || '',
-        puesto_titular: dep.contact?.puesto_titular || existingDatos.contacto?.puesto_titular || 'Directora/Director General',
-        responsable_del_programa: dep.contact?.responsable_del_programa || existingDatos.contacto?.responsable_del_programa || dep.contact?.titular || '',
-        telefono: dep.contact?.phone || ''
-      },
-      horarios_servicio: {
-        dias: diasVal,
-        horas: horasVal
-      },
-      interno: dep.category === 'Internos',
-      logo: dep.image || 'https://images.unsplash.com/photo-1523050335392-93851179ae22?auto=format&fit=crop&q=80&w=200',
-      modalidad: dep.contact?.modalidad || existingDatos.modalidad || 'presencial',
-      nombre_dependencia: dep.name,
-      nombre_programa: dep.subCategory,
-      objetivo: dep.objective || '',
-      sector: sectorVal,
-      ubicacion: {
-        domicilio_dependencia: dep.contact?.address || dep.location || 'Cancún, Q.R.',
-        ubicacion_maps: dep.contact?.ubicacion_maps || existingDatos.ubicacion?.ubicacion_maps || 'https://maps.google.com'
-      },
-      vacantes: Number(dep.vacancies)
-    };
-
-    // Save only under the specified map Key ('Datos' or 'datos') to avoid root flat clutter
-    const dbData = {
-      [saveWithKey]: customDatos
-    };
-    
-    await setDoc(docRef, dbData, { merge: true });
+    saveDependenciesSync(list);
     return docId;
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    console.error("Local Storage save dependency error: ", error);
     throw error;
   }
 };
 
 export const deleteDependency = async (id: string): Promise<void> => {
-  const path = `dependencias/${id}`;
+  if (isMongoActive) {
+    try {
+      const res = await fetch(`/api/dependencias/${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success) return;
+    } catch (e) {
+      console.warn("Error deleting dependency from MongoDB, falling back: ", e);
+    }
+  }
   try {
-    // For safety with simulated or nested logic, we can import deleteDoc too,
-    // wait, we need to import deleteDoc! Let's check imports.
-    const { deleteDoc } = await import("firebase/firestore");
-    await deleteDoc(doc(db, "dependencias", id));
+    const list = getDependenciesSync();
+    const filtered = list.filter(d => d.id !== id);
+    saveDependenciesSync(filtered);
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
+    console.error("Local Storage delete dependency error: ", error);
   }
 };
 
 export const getAlumnosTecnologico = async (): Promise<any[]> => {
-  const path = "alumnos_tecnologico";
-  try {
-    const querySnapshot = await getDocs(collection(db, path));
-    if (querySnapshot.empty) {
-      return [];
+  if (isMongoActive) {
+    try {
+      const res = await fetch('/api/alumnos');
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        return json.data.map((student: any) => {
+          const d = student.datos || {};
+          const statusAcad = student.status_academico || {};
+          const fullName = `${d.nombre || ''} ${d.apellido_paterno || ''} ${d.apellido_materno || ''}`.trim() || 'Estudiante';
+          const aprobados = typeof statusAcad.creditos_aprobados === 'number' ? statusAcad.creditos_aprobados : 0;
+          const totalCarrera = typeof statusAcad.creditos_total_carrera === 'number' ? statusAcad.creditos_total_carrera : 0;
+          const computedProgress = totalCarrera > 0 ? Math.round((aprobados / totalCarrera) * 100) : 0;
+          
+          return {
+            ...normalizeStudent({
+              ...student,
+              id: student._id || student.id,
+              id_dependencia: student.id_dependencia?._id || student.id_dependencia || null,
+              dependencia_seleccionada: student.id_dependencia?.nombre_dependencia?.toUpperCase() || ''
+            }),
+            id: student._id || student.id,
+            name: fullName,
+            control: d.no_control || student._id,
+            career: statusAcad.carrera || 'INGENIERÍA EN SISTEMAS COMPUTACIONALES',
+            status: student.apto ? 'Apto' : 'Pendiente Confirmación',
+            progress: computedProgress,
+            credits: statusAcad.creditos_complementarios || 0,
+            date: 'Reciente',
+            semester: statusAcad.semestre ? `${statusAcad.semestre}º Semestre` : '8vo Semestre'
+          };
+        });
+      }
+    } catch (e) {
+      console.warn("Error getting Alumnos from MongoDB, falling back: ", e);
     }
-    return querySnapshot.docs.map(doc => {
-      const data = doc.data();
-      const d = data.datos || {};
-      const statusAcad = data.status_academico || {};
+  }
+  try {
+    const list = getAlumnosTecnologicoSync();
+    return list.map(student => {
+      const d = student.datos || {};
+      const statusAcad = student.status_academico || {};
       
       const firstName = d.nombre || "";
       const p = d.apellido_paterno || "";
       const m = d.apellido_materno || "";
       const fullName = `${firstName} ${p} ${m}`.trim().replace(/\s+/g, " ") || 'Estudiante';
       
-      // Calculate dynamic progress and credits
       const aprobados = typeof statusAcad.creditos_aprobados === 'number' ? statusAcad.creditos_aprobados : 0;
       const totalCarrera = typeof statusAcad.creditos_total_carrera === 'number' ? statusAcad.creditos_total_carrera : 0;
       let computedProgress = 0;
@@ -554,33 +1078,27 @@ export const getAlumnosTecnologico = async (): Promise<any[]> => {
         computedProgress = Math.round((aprobados / totalCarrera) * 100);
       } else if (typeof statusAcad.porcentaje_avance === 'number') {
         computedProgress = statusAcad.porcentaje_avance;
-      } else if (typeof d.porcentaje_avance === 'number') {
-        computedProgress = d.porcentaje_avance;
-      }
-
-      let compCredits = 0;
-      if (typeof statusAcad.creditos_complemnetarios === 'number') {
-        compCredits = statusAcad.creditos_complemnetarios;
-      } else if (typeof statusAcad.creditos_complementarios === 'number') {
-        compCredits = statusAcad.creditos_complementarios;
-      } else if (typeof d.creditos_complementarios === 'number') {
-        compCredits = d.creditos_complementarios;
       }
       
+      let compCredits = statusAcad.creditos_complementarios || 0;
+      
+      let formattedSemester = typeof statusAcad.semestre === 'number' ? `${statusAcad.semestre}º Semestre` : (statusAcad.semestre || '8vo Semestre');
+
       return {
-        id: doc.id,
+        ...student,
+        id: student.id,
         name: fullName,
-        control: d.no_control || d.noControl || doc.id.substring(0, 8),
-        career: statusAcad.carrera || d.carrera || 'INGENIERÍA EN SISTEMAS COMPUTACIONALES',
-        status: data.apto ? 'Apto' : 'Pendiente Confirmación',
+        control: d.no_control || student.id,
+        career: statusAcad.carrera || 'INGENIERÍA EN SISTEMAS COMPUTACIONALES',
+        status: student.apto ? 'Apto' : 'Pendiente Confirmación',
         progress: computedProgress,
         credits: compCredits,
         date: 'Reciente',
-        ...data
+        semester: formattedSemester
       };
     });
   } catch (error) {
-    console.error("Error fetching alumnos_tecnologico:", error);
+    console.error("Local Storage list Alumnos error: ", error);
     return [];
   }
 };
@@ -601,17 +1119,17 @@ export const createTestAlumno = async (studentData?: {
 }): Promise<string> => {
   try {
     const randomId = `test_uid_${Math.random().toString(36).substring(2, 11)}`;
-    const docRef = doc(db, "alumnos_tecnologico", randomId);
+    const list = getAlumnosTecnologicoSync();
 
     const checkAprobados = studentData?.creditos_aprobados !== undefined ? studentData.creditos_aprobados : 210;
     const checkTotal = studentData?.creditos_total_carrera !== undefined ? studentData.creditos_total_carrera : 260;
     const checkCredits = studentData?.creditos_complementarios !== undefined ? studentData.creditos_complementarios : 5;
     const progressPerc = checkTotal > 0 ? (checkAprobados / checkTotal) : 0;
     
-    // meets criteria if it has 70% progress and at least 5 complementary credits
     const isApto = progressPerc >= 0.70 && checkCredits >= 5;
 
-    const defaultStudent = {
+    const newStudent = {
+      id: randomId,
       apto: isApto,
       datos: {
         nombre: studentData?.nombre || "Sofía",
@@ -620,14 +1138,14 @@ export const createTestAlumno = async (studentData?: {
         no_control: studentData?.no_control || `21530${Math.floor(100 + Math.random() * 900)}`,
         correo_institucional: studentData?.correo_institucional || "sofia.garcia@cancun.tecnm.mx",
         foto: studentData?.sexo === "Masculino" 
-          ? "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=150"
+          ? "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=150"
           : "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150",
         semestre: studentData?.semestre || 8,
         sexo: studentData?.sexo || "Femenino",
         genero: studentData?.sexo || "Femenino",
         telefono: studentData?.telefono || "9981234567",
         nss: "12345678901",
-        fecha_nacimiento: Timestamp.fromDate(new Date("2003-04-18T12:00:00"))
+        fecha_nacimiento: "2003-04-18"
       },
       status_academico: {
         carrera: studentData?.carrera || "INGENIERÍA EN SISTEMAS COMPUTACIONALES",
@@ -643,150 +1161,113 @@ export const createTestAlumno = async (studentData?: {
         ciudad: "Cancún",
         estado: "Quintana Roo"
       },
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
-    await setDoc(docRef, defaultStudent);
+    list.push(newStudent);
+    saveAlumnosTecnologicoSync(list);
     return randomId;
   } catch (error) {
-    console.error("Error creating test student:", error);
+    console.error("Local Storage create test student error:", error);
     throw error;
   }
 };
 
 export const deleteAlumno = async (id: string): Promise<void> => {
   try {
-    const { deleteDoc } = await import("firebase/firestore");
-    await deleteDoc(doc(db, "alumnos_tecnologico", id));
+    const list = getAlumnosTecnologicoSync();
+    const filtered = list.filter(a => a.id !== id);
+    saveAlumnosTecnologicoSync(filtered);
   } catch (error) {
-    console.error("Error deleting alumno:", error);
+    console.error("Local Storage delete student error:", error);
     throw error;
   }
 };
 
 export const selectDependencyForStudent = async (studentUid: string, dependency: Dependency): Promise<void> => {
-  try {
-    let prevDependencyId = "";
-    
-    // 1. Get current student selected dependency
-    const studentRef = doc(db, "alumnos_tecnologico", studentUid);
-    const studentSnap = await getDoc(studentRef);
-    if (studentSnap.exists()) {
-      const studentData = studentSnap.data();
-      prevDependencyId = studentData.id_dependencia || (studentData.datos && studentData.datos.id_dependencia) || "";
-    }
+  if (isMongoActive) {
+    try {
+      const student = await getAlumnoCompleto(studentUid);
+      if (student) {
+        const prevDependencyId = student.id_dependencia?._id || student.id_dependencia || "";
+        
+        await updateAlumnoCompleto(studentUid, {
+          id_dependencia: dependency.id,
+          dependencia_seleccionada: dependency.name
+        });
 
-    // If already linked to the same dependency, don't adjust any vacancies!
-    if (prevDependencyId === dependency.id) {
-      if (studentSnap.exists()) {
-        const studentData = studentSnap.data();
-        const originalDatos = studentData.datos || {};
-        await setDoc(studentRef, {
+        // Alter vacancies in Mongo
+        if (prevDependencyId && prevDependencyId !== dependency.id) {
+          const prevDep = await getDependency(prevDependencyId);
+          if (prevDep) {
+            await saveDependency({
+              ...prevDep,
+              vacancies: prevDep.vacancies + 1
+            });
+          }
+        }
+
+        const targetDep = await getDependency(dependency.id);
+        if (targetDep) {
+          await saveDependency({
+            ...targetDep,
+            vacancies: Math.max(0, targetDep.vacancies - 1)
+          });
+        }
+        
+        notifyDbChanged();
+        return;
+      }
+    } catch (e) {
+      console.error("Error setting dependency in MongoDB: ", e);
+    }
+  }
+
+  try {
+    const students = getAlumnosTecnologicoSync();
+    const dependencies = getDependenciesSync();
+    
+    let prevDependencyId = "";
+    const updatedStudents = students.map(student => {
+      if (student.id === studentUid) {
+        prevDependencyId = student.id_dependencia || "";
+        const originalDatos = student.datos || {};
+        return {
+          ...student,
           id_dependencia: dependency.id,
           dependencia_seleccionada: dependency.name,
           datos: {
             ...originalDatos,
             id_dependencia: dependency.id
           },
-          updatedAt: Timestamp.now()
-        }, { merge: true });
+          updatedAt: new Date().toISOString()
+        };
       }
-      return; // Stop here! No vacancies altered!
-    }
+      return student;
+    });
 
-    // Otherwise, they are selecting it for the first time or changing dependencies.
-    // 2. Update student document with the selected dependency ID
-    if (studentSnap.exists()) {
-      const studentData = studentSnap.data();
-      const originalDatos = studentData.datos || {};
-      
-      await setDoc(studentRef, {
-        id_dependencia: dependency.id,
-        dependencia_seleccionada: dependency.name,
-        datos: {
-          ...originalDatos,
-          id_dependencia: dependency.id
-        },
-        updatedAt: Timestamp.now()
-      }, { merge: true });
-    }
+    saveAlumnosTecnologicoSync(updatedStudents);
 
-    // 3. Increment vacancies for original dependency if changing dependencies
-    if (prevDependencyId) {
-      try {
-        const prevDepRef = doc(db, "dependencias", prevDependencyId);
-        const prevDepSnap = await getDoc(prevDepRef);
-        if (prevDepSnap.exists()) {
-          const prevDepData = prevDepSnap.data();
-          let saveWithKey = 'Datos';
-          let originalDatos: any = {};
-          
-          if (prevDepData.datos) {
-            originalDatos = prevDepData.datos;
-            saveWithKey = 'datos';
-          } else if (prevDepData.Datos) {
-            originalDatos = prevDepData.Datos;
-            saveWithKey = 'Datos';
-          } else {
-            originalDatos = prevDepData;
-            saveWithKey = 'Datos';
-          }
-
-          const currentVacancies = typeof originalDatos.vacantes === 'number' 
-            ? originalDatos.vacantes 
-            : (typeof originalDatos.vacancies === 'number' ? originalDatos.vacancies : 0);
-          
-          const newVacancies = currentVacancies + 1;
-          
-          await setDoc(prevDepRef, {
-            [saveWithKey]: {
-              ...originalDatos,
-              vacantes: newVacancies,
-              vacancies: newVacancies
-            }
-          }, { merge: true });
-        }
-      } catch (err) {
-        console.error("Error returning vacancy to previous dependency:", err);
+    // Adjust vacancies
+    const updatedDeps = dependencies.map(dep => {
+      let vacancies = dep.vacancies;
+      if (dep.id === prevDependencyId && prevDependencyId && prevDependencyId !== dependency.id) {
+        vacancies = vacancies + 1;
       }
-    }
-
-    // 4. Decrement available vacancies in the new dependency document in Firestore
-    const depRef = doc(db, "dependencias", dependency.id);
-    const depSnap = await getDoc(depRef);
-    if (depSnap.exists()) {
-      const depData = depSnap.data();
-      let saveWithKey = 'Datos';
-      let originalDatos: any = {};
-      
-      if (depData.datos) {
-        originalDatos = depData.datos;
-        saveWithKey = 'datos';
-      } else if (depData.Datos) {
-        originalDatos = depData.Datos;
-        saveWithKey = 'Datos';
-      } else {
-        originalDatos = depData;
-        saveWithKey = 'Datos';
+      if (dep.id === dependency.id && prevDependencyId !== dependency.id) {
+        vacancies = Math.max(0, vacancies - 1);
       }
+      return {
+        ...dep,
+        vacancies,
+        status: (vacancies > 4 ? 'Alta Disponibilidad' : (vacancies > 0 ? 'Lugares Limitados' : 'Disponible')) as any
+      };
+    });
 
-      const currentVacancies = typeof originalDatos.vacantes === 'number' 
-        ? originalDatos.vacantes 
-        : (typeof originalDatos.vacancies === 'number' ? originalDatos.vacancies : 0);
-      
-      const newVacancies = Math.max(0, currentVacancies - 1);
-      
-      await setDoc(depRef, {
-        [saveWithKey]: {
-          ...originalDatos,
-          vacantes: newVacancies,
-          vacancies: newVacancies
-        }
-      }, { merge: true });
-    }
+    saveDependenciesSync(updatedDeps);
   } catch (error) {
-    console.error("Error linking student with dependency in Firestore:", error);
+    console.error("Local Storage select dependency error:", error);
     throw error;
   }
 };
@@ -797,24 +1278,48 @@ export const updateStudentDocumentValidation = async (
   approved: boolean, 
   observaciones: string = ""
 ): Promise<void> => {
-  const path = `alumnos_tecnologico/${studentUid}`;
-  try {
-    const docRef = doc(db, "alumnos_tecnologico", studentUid);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) {
-      throw new Error("Student document does not exist");
-    }
-    const currentDocData = docSnap.data()?.[docKey] || {};
-    await setDoc(docRef, {
-      [docKey]: {
-        ...currentDocData,
-        estado_validacion: approved,
-        observaciones: observaciones,
-        fecha_validacion: Timestamp.now()
+  if (isMongoActive) {
+    try {
+      const student = await getAlumnoCompleto(studentUid);
+      if (student) {
+        const currentDocData = student[docKey] || {};
+        const updatePayload = {
+          [docKey]: {
+            ...currentDocData,
+            estado_validacion: approved,
+            observaciones: observaciones,
+            fecha_validacion: new Date().toISOString()
+          }
+        };
+        await updateAlumnoCompleto(studentUid, updatePayload);
+        return;
       }
-    }, { merge: true });
+    } catch (e) {
+      console.error("MongoDB document validation error: ", e);
+    }
+  }
+
+  try {
+    const list = getAlumnosTecnologicoSync();
+    const updated = list.map(student => {
+      if (student.id === studentUid) {
+        const currentDocData = student[docKey] || {};
+        return {
+          ...student,
+          [docKey]: {
+            ...currentDocData,
+            estado_validacion: approved,
+            observaciones: observaciones,
+            fecha_validacion: new Date().toISOString()
+          }
+        };
+      }
+      return student;
+    });
+    
+    saveAlumnosTecnologicoSync(updated);
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    console.error("Local Storage document validation error: ", error);
     throw error;
   }
 };
@@ -823,17 +1328,81 @@ export const saveAnexo17Datos = async (
   studentUid: string, 
   datos: any
 ): Promise<void> => {
-  const path = `alumnos_tecnologico/${studentUid}`;
+  if (isMongoActive) {
+    try {
+      await updateAlumnoCompleto(studentUid, { anexo_17_datos: datos });
+      return;
+    } catch (e) {
+      console.error("MongoDB save anexo 17 data error: ", e);
+    }
+  }
+
   try {
-    const docRef = doc(db, "alumnos_tecnologico", studentUid);
-    await setDoc(docRef, {
-      anexo_17_datos: datos,
-      updatedAt: Timestamp.now()
-    }, { merge: true });
+    const list = getAlumnosTecnologicoSync();
+    const updated = list.map(student => {
+      if (student.id === studentUid) {
+        return {
+          ...student,
+          anexo_17_datos: datos,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return student;
+    });
+    saveAlumnosTecnologicoSync(updated);
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    console.error("Local Storage save anexo 17 data error: ", error);
     throw error;
   }
 };
 
+export const getAlumnoCompleto = async (studentUid: string): Promise<any | null> => {
+  if (isMongoActive) {
+    try {
+      const res = await fetch(`/api/alumnos/${studentUid}`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        return normalizeStudent({
+          ...json.data,
+          id: json.data._id || json.data.id
+        });
+      }
+    } catch (e) {
+      console.warn("Error getting AlumnoCompleto from MongoDB, falling back: ", e);
+    }
+  }
+  const list = getAlumnosTecnologicoSync();
+  return list.find(s => s.id === studentUid) || null;
+};
 
+export const updateAlumnoCompleto = async (studentUid: string, data: Partial<any>): Promise<void> => {
+  if (isMongoActive) {
+    try {
+      const res = await fetch(`/api/alumnos/${studentUid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const json = await res.json();
+      if (json.success) {
+        notifyDbChanged();
+        return;
+      }
+    } catch (e) {
+      console.warn("Error updating AlumnoCompleto on MongoDB, falling back: ", e);
+    }
+  }
+
+  const list = getAlumnosTecnologicoSync();
+  const updated = list.map(student => {
+    if (student.id === studentUid) {
+      return {
+        ...student,
+        ...data,
+        updatedAt: new Date().toISOString()
+      };
+    }
+    return student;
+  });
+  saveAlumnosTecnologicoSync(updated);
+};

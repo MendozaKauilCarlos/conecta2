@@ -1,15 +1,22 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, FileSignature, Loader2, UserX, Plus, Trash2, CheckCircle, XCircle, AlertCircle, Sparkles, X, Check, Eye, Download, FileText } from 'lucide-react';
+import { Search, FileSignature, Loader2, UserX, Plus, Trash2, CheckCircle, XCircle, AlertCircle, Sparkles, X, Check, Eye, Download, FileText, FolderArchive, ArrowRight, ArrowLeft } from 'lucide-react';
 import * as dbService from '../../services/dbService';
 
-export function AdminReviewsView({ isDarkMode }: { isDarkMode?: boolean }) {
+export function AdminReviewsView({ isDarkMode, mode = 'activo' }: { isDarkMode?: boolean; mode?: 'activo' | 'historial' }) {
+  const CURRENT_ACTIVE_PERIOD = "AGOSTO - DICIEMBRE 2026";
   const [students, setStudents] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const activeTab = mode;
+  const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
+
+  useEffect(() => {
+    setSelectedPeriod(null);
+  }, [mode]);
 
   useEffect(() => {
     let active = true;
@@ -89,50 +96,241 @@ export function AdminReviewsView({ isDarkMode }: { isDarkMode?: boolean }) {
     }
   };
 
+  const getStudentPeriodDisplay = (student: any): string => {
+    const p = student.anexo_17_datos?.periodo || student.status_academico?.periodo;
+    if (!p) return 'AGOSTO - DICIEMBRE 2026';
+    const normalized = p.toUpperCase().trim();
+    if (normalized.includes('2026-05') || normalized.includes('2026-01')) {
+      return 'ENERO - JUNIO 2026';
+    } else if (normalized.includes('2026-08') || normalized.includes('2026-12')) {
+      return 'AGOSTO - DICIEMBRE 2026';
+    }
+    return normalized;
+  };
+
+  const availablePeriods = useMemo(() => {
+    const periodsSet = new Set<string>();
+    // Default standard periods so they are always there as choices
+    periodsSet.add('ENERO - JUNIO 2026');
+    periodsSet.add('AGOSTO - DICIEMBRE 2026');
+    periodsSet.add('ENERO - JUNIO 2027');
+    periodsSet.add('AGOSTO - DICIEMBRE 2027');
+    
+    // Extract periods from students
+    students.forEach(student => {
+      const p = getStudentPeriodDisplay(student);
+      if (p) {
+        periodsSet.add(p);
+      }
+    });
+
+    // Sort descending to show newest first
+    return Array.from(periodsSet).sort((a, b) => b.localeCompare(a));
+  }, [students]);
+
+  const availablePeriodsWithCounts = useMemo(() => {
+    return availablePeriods.map(name => {
+      const count = students.filter(s => getStudentPeriodDisplay(s) === name).length;
+      return { name, count };
+    });
+  }, [students, availablePeriods]);
+
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
+      const studentPeriod = getStudentPeriodDisplay(s);
+
+      if (activeTab === 'activo') {
+        // Only show students of the current active period
+        if (studentPeriod !== CURRENT_ACTIVE_PERIOD) {
+          return false;
+        }
+      } else {
+        // Show students of the selected period in historical mode
+        if (selectedPeriod !== null && studentPeriod !== selectedPeriod) {
+          return false;
+        }
+      }
+
       const name = s.name || '';
       const control = s.control || s.controlNumber || '';
       return name.toLowerCase().includes(searchQuery.toLowerCase()) ||
              control.toLowerCase().includes(searchQuery.toLowerCase());
     });
-  }, [students, searchQuery]);
+  }, [students, searchQuery, activeTab, selectedPeriod]);
+
+  // If in Historial mode and NO period is selected yet, render the Period Folder Grid
+  if (mode === 'historial' && selectedPeriod === null) {
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+          <div>
+            <h2 className={`text-3xl sm:text-4xl font-black tracking-tight transition-colors duration-500 ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>
+              Historial de Periodos
+            </h2>
+            <p className={`text-base sm:text-lg font-medium mt-2 transition-colors duration-500 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+              Consulta y visualiza los expedientes escolares históricos clasificados por cada ciclo escolar pasado.
+            </p>
+          </div>
+        </div>
+
+        {/* Info Header */}
+        <div className={`p-6 rounded-[2rem] border transition-all duration-500 flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+          isDarkMode 
+            ? 'bg-[#121926] border-neutral-800' 
+            : 'bg-white border-neutral-100 shadow-sm'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-brand-teal/10 text-brand-teal shrink-0">
+              <FileText size={20} />
+            </div>
+            <div>
+              <h3 className={`text-sm font-black tracking-tight ${isDarkMode ? 'text-neutral-200' : 'text-brand-blue'}`}>
+                Archivo Digital de Periodos
+              </h3>
+              <p className="text-[11px] font-medium text-neutral-500">
+                Selecciona una carpeta para ingresar al registro de alumnos, verificar documentación técnica y descargar reportes específicos de ese periodo.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <Loader2 className="w-10 h-10 text-brand-teal animate-spin" />
+            <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Obteniendo periodos...</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {availablePeriodsWithCounts.map((period) => (
+              <div 
+                key={period.name}
+                id={`period-card-${period.name.replace(/\s+/g, '-').toLowerCase()}`}
+                onClick={() => setSelectedPeriod(period.name)}
+                className={`p-8 rounded-[2rem] border transition-all duration-300 flex flex-col justify-between cursor-pointer group relative overflow-hidden ${
+                  isDarkMode 
+                    ? 'bg-[#121926] border-neutral-800 hover:border-brand-teal/50 hover:shadow-lg hover:shadow-brand-teal/5 hover:-translate-y-1' 
+                    : 'bg-white border-neutral-100 hover:border-brand-teal/40 hover:shadow-xl hover:shadow-brand-teal/5 hover:-translate-y-1'
+                }`}
+              >
+                {/* Background Decor */}
+                <div className="absolute top-0 right-0 w-24 h-24 bg-brand-teal/5 rounded-full blur-2xl group-hover:bg-brand-teal/10 transition-colors duration-300" />
+
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className={`p-4 rounded-2xl ${isDarkMode ? 'bg-brand-teal/10 text-brand-teal' : 'bg-brand-teal/5 text-brand-teal'} group-hover:scale-110 transition-transform duration-300`}>
+                      <FolderArchive size={24} />
+                    </div>
+                    <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                      period.count > 0 
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400'
+                    }`}>
+                      {period.count} {period.count === 1 ? 'Alumno' : 'Alumnos'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <h4 className={`text-base font-black uppercase tracking-wider ${isDarkMode ? 'text-neutral-100' : 'text-brand-blue'}`}>
+                      {period.name}
+                    </h4>
+                    <p className="text-xs font-medium text-neutral-500 mt-2">
+                      Expedientes escolares, anexos y actas de liberación técnica firmadas.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-neutral-100 dark:border-neutral-800/60 mt-6 flex items-center justify-between text-xs font-black uppercase tracking-widest text-brand-teal group-hover:text-emerald-500 transition-colors">
+                  <span>Consultar Expedientes</span>
+                  <ArrowRight size={16} className="transform group-hover:translate-x-1.5 transition-transform duration-300" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8 animate-fade-in">
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
         <div>
-          <h2 className={`text-3xl sm:text-4xl font-black tracking-tight transition-colors duration-500 ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>Revisión de Expedientes</h2>
-          <p className={`text-base sm:text-lg font-medium mt-2 transition-colors duration-500 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>Evalúa los documentos técnicos y genera las cartas de liberación de alumnos registrados.</p>
-        </div>
-        
-        <div className="flex flex-wrap items-center gap-3 bg-brand-teal/5 p-4 rounded-[2rem] border border-brand-teal/10">
-          <div className="flex items-center gap-1.5 text-xs font-black uppercase text-brand-teal tracking-widest mr-2">
-            <Sparkles size={14} className="animate-pulse" />
-            Zona de Pruebas:
-          </div>
-          <button
-            disabled={isAdding}
-            onClick={() => handleAddMockStudent(true)}
-            className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-brand-teal text-white text-[11px] font-black uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all shadow-md shadow-brand-teal/20 disabled:opacity-50"
-          >
-            {isAdding ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-            + Alumno Apto
-          </button>
-          <button
-            disabled={isAdding}
-            onClick={() => handleAddMockStudent(false)}
-            className={`inline-flex items-center gap-2 px-5 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all outline-none border disabled:opacity-50 ${
-              isDarkMode 
-                ? 'bg-[#1e293b] text-neutral-200 border-neutral-700 hover:bg-[#334155]' 
-                : 'bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50'
-            }`}
-          >
-            {isAdding ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-            + Alumno No Apto
-          </button>
+          <h2 className={`text-3xl sm:text-4xl font-black tracking-tight transition-colors duration-500 ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>
+            {mode === 'activo' ? 'Revisión de Expedientes' : 'Historial de Periodos'}
+          </h2>
+          <p className={`text-base sm:text-lg font-medium mt-2 transition-colors duration-500 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-400'}`}>
+            {mode === 'activo' 
+              ? 'Evalúa los documentos técnicos y genera las cartas de liberación de alumnos registrados.' 
+              : `Filtra, consulta y visualiza expedientes escolares correspondientes al ciclo ${selectedPeriod}.`}
+          </p>
         </div>
       </div>
+
+      {/* Info Card or Period Selector based on Mode */}
+      {mode === 'activo' ? (
+        <div className={`p-6 rounded-[2rem] border transition-all duration-500 flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+          isDarkMode 
+            ? 'bg-emerald-950/10 border-emerald-900/30' 
+            : 'bg-emerald-50/50 border-emerald-100 shadow-sm'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-500 shrink-0">
+              <CheckCircle size={20} />
+            </div>
+            <div>
+              <h3 className={`text-sm font-black tracking-tight ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>
+                Periodo Actual Vigente: {CURRENT_ACTIVE_PERIOD}
+              </h3>
+              <p className="text-[11px] font-medium text-neutral-500">
+                Mostrando únicamente los expedientes de los alumnos registrados en este ciclo escolar activo.
+              </p>
+            </div>
+          </div>
+          <span className="self-start md:self-auto inline-flex items-center px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/10 animate-pulse">
+            Ciclo Activo
+          </span>
+        </div>
+      ) : (
+        <div className={`p-6 rounded-[2rem] border transition-all duration-500 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+          isDarkMode 
+            ? 'bg-[#121926] border-neutral-800' 
+            : 'bg-white border-neutral-100 shadow-sm'
+        }`}>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setSelectedPeriod(null)}
+              className={`p-3 rounded-2xl transition-all hover:scale-105 active:scale-95 flex items-center justify-center shrink-0 ${
+                isDarkMode 
+                  ? 'bg-neutral-850 hover:bg-neutral-800 text-neutral-300' 
+                  : 'bg-neutral-50 hover:bg-neutral-100 text-neutral-600'
+              }`}
+              title="Volver al Historial de Periodos"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Historial</span>
+                <span className="text-neutral-300">/</span>
+                <span className="text-xs font-black text-brand-teal uppercase tracking-wider">{selectedPeriod}</span>
+              </div>
+              <h3 className={`text-sm font-black tracking-tight mt-0.5 ${isDarkMode ? 'text-neutral-200' : 'text-brand-blue'}`}>
+                Expedientes del Periodo {selectedPeriod}
+              </h3>
+            </div>
+          </div>
+          <button
+            onClick={() => setSelectedPeriod(null)}
+            className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 border cursor-pointer ${
+              isDarkMode 
+                ? 'bg-neutral-800/50 hover:bg-neutral-800 text-neutral-450 border-neutral-850 hover:text-neutral-200' 
+                : 'bg-neutral-50 hover:bg-neutral-100 text-neutral-600 border-neutral-150'
+            }`}
+          >
+            ← Cambiar Periodo
+          </button>
+        </div>
+      )}
 
       <div className={`rounded-[2.5rem] border shadow-sm overflow-hidden transition-colors duration-500 ${isDarkMode ? 'bg-[#121926] border-neutral-800 shadow-brand-teal/5' : 'bg-white border-neutral-100'}`}>
         <div className={`p-8 border-b transition-colors duration-500 ${isDarkMode ? 'border-neutral-800 bg-[#0a0f18]/30' : 'border-neutral-100 bg-neutral-50/30'}`}>
@@ -162,7 +360,7 @@ export function AdminReviewsView({ isDarkMode }: { isDarkMode?: boolean }) {
               {searchQuery ? 'Ningún alumno coincide con tu búsqueda.' : 'No hay alumnos registrados actualmente.'}
             </p>
             <p className="text-xs font-medium text-neutral-500 mt-2">
-              {searchQuery ? 'Intenta modificar el filtro o el término de búsqueda.' : 'Haz clic en los botones de "Zona de Pruebas" para generar alumnos de prueba de inmediato.'}
+              {searchQuery ? 'Intenta modificar el filtro o el término de búsqueda.' : 'Los alumnos aparecerán aquí cuando completen su registro.'}
             </p>
           </div>
         ) : (
@@ -184,9 +382,15 @@ export function AdminReviewsView({ isDarkMode }: { isDarkMode?: boolean }) {
                   return (
                     <tr key={student.id} className={`transition-colors group ${isDarkMode ? 'hover:bg-[#1a2333]' : 'hover:bg-brand-teal/[0.02]'}`}>
                       <td className="px-8 py-6">
-                        <div className="flex flex-col">
+                        <div className="flex flex-col gap-1">
                           <span className={`font-black tracking-tight transition-colors duration-500 ${isDarkMode ? 'text-neutral-200' : 'text-brand-blue'}`}>{student.name}</span>
-                          <span className={`text-xs font-bold uppercase tracking-widest transition-colors duration-500 ${isDarkMode ? 'text-neutral-600' : 'text-neutral-400'}`}>{student.control}</span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`text-xs font-black uppercase tracking-widest transition-colors duration-500 ${isDarkMode ? 'text-neutral-600' : 'text-neutral-400'}`}>{student.control}</span>
+                            <span className="text-[10px] text-neutral-400 shrink-0">•</span>
+                            <span className="inline-flex items-center text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-brand-teal/10 text-brand-teal border border-brand-teal/10 shrink-0">
+                              {getStudentPeriodDisplay(student)}
+                            </span>
+                          </div>
                         </div>
                       </td>
                       <td className={`px-8 py-6 text-sm font-bold transition-colors duration-500 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-500'}`}>
@@ -298,34 +502,101 @@ interface ReviewDocsModalProps {
 }
 
 function ReviewDocsModal({ student, isDarkMode, onClose, onUpdate }: ReviewDocsModalProps) {
-  const [activeKey, setActiveKey] = useState<'kardex' | 'carga_academica' | 'vigencia_derechos'>('kardex');
+  const [activeCategory, setActiveCategory] = useState<'requisitos' | 'apertura' | 'r1' | 'r2' | 'r3'>('requisitos');
+  const [activeKey, setActiveKey] = useState<string>('kardex');
   const [obsText, setObsText] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [showRejectionForm, setShowRejectionForm] = useState(false);
 
+  const docTitles: Record<string, string> = {
+    kardex: 'Kardex Académico',
+    carga_academica: 'Carga Académica',
+    vigencia_derechos: 'Vigencia de Derechos',
+    solicitud_servicio_social: 'Solicitud de Servicio Social',
+    carta_compromiso: 'Carta Compromiso',
+    carta_presentacion: 'Carta de Presentación',
+    carta_asignacion: 'Carta Asignación',
+    plan_de_trabajo: 'Plan de Trabajo',
+    tarjeta_control: 'Tarjeta de Control',
+    r1_reporte_bimestral_doc: 'Reporte 1: Reporte Bimestral',
+    r1_evaluacion_cualitativa: 'Reporte 1: Evaluación Cualitativa',
+    r1_auto_evaluacion: 'Reporte 1: Autoevaluación',
+    r2_reporte_bimestral_doc: 'Reporte 2: Reporte Bimestral',
+    r2_evaluacion_cualitativa: 'Reporte 2: Evaluación Cualitativa',
+    r2_auto_evaluacion: 'Reporte 2: Autoevaluación',
+    r3_reporte_bimestral_doc: 'Reporte 3: Reporte Bimestral',
+    r3_evaluacion_cualitativa: 'Reporte 3: Evaluación Cualitativa',
+    r3_auto_evaluacion: 'Reporte 3: Autoevaluación',
+    evaluacion_desempeno_final: 'Evaluación Cualitativa Final',
+    formato_final: 'Formato de Informe Final',
+    reporte_final: 'Informe Final'
+  };
+
   // Parse active document info
   const docInfo = useMemo(() => {
-    const docMap = student?.[activeKey] || {};
-    const url = docMap.url_documento || '';
-    const valid = docMap.estado_validacion === true;
-    const obs = docMap.observaciones || '';
-    
-    let status = 'PENDIENTE';
-    if (url) {
-      if (valid) {
-        status = 'APROBADO';
-      } else if (obs && obs.trim() !== '' && obs.trim() !== '""' && obs.trim() !== '" "') {
-        status = 'RECHAZADO';
-      } else {
-        status = 'EN REVISIÓN';
+    if (activeKey.startsWith('r1_') || activeKey.startsWith('r2_') || activeKey.startsWith('r3_')) {
+      const reportNo = parseInt(activeKey.substring(1, 2));
+      const subKey = activeKey.substring(3) as 'reporte_bimestral_doc' | 'evaluacion_cualitativa' | 'auto_evaluacion';
+      
+      const reports = student?.reportes_bimestrales || [];
+      const report = reports.find((r: any) => r.numero_reporte === reportNo);
+      const docMap = report?.[subKey] || {};
+      
+      const url = docMap.url_documento || docMap.url_sellado || '';
+      const valid = docMap.estado_validacion === true;
+      const obs = docMap.observaciones || '';
+      
+      let status = 'PENDIENTE';
+      if (url) {
+        if (valid) {
+          status = 'APROBADO';
+        } else if (obs && obs.trim() !== '' && obs.trim() !== '""') {
+          status = 'RECHAZADO';
+        } else {
+          status = 'EN REVISIÓN';
+        }
       }
+      return { status, url, observaciones: obs };
+    } else if (activeKey === 'evaluacion_desempeno_final' || activeKey === 'formato_final' || activeKey === 'reporte_final') {
+      const docMap = student?.cierre_servicio?.[activeKey] || {};
+      const url = docMap.url_documento || docMap.url_sellado || '';
+      const valid = docMap.estado_validacion === true;
+      const obs = docMap.observaciones || '';
+      
+      let status = 'PENDIENTE';
+      if (url) {
+        if (valid) {
+          status = 'APROBADO';
+        } else if (obs && obs.trim() !== '' && obs.trim() !== '""') {
+          status = 'RECHAZADO';
+        } else {
+          status = 'EN REVISIÓN';
+        }
+      }
+      return { status, url, observaciones: obs };
+    } else {
+      const docMap = student?.[activeKey] || {};
+      const url = docMap.url_documento || '';
+      const valid = docMap.estado_validacion === true;
+      const obs = docMap.observaciones || '';
+      
+      let status = 'PENDIENTE';
+      if (url) {
+        if (valid) {
+          status = 'APROBADO';
+        } else if (obs && obs.trim() !== '' && obs.trim() !== '""' && obs.trim() !== '" "') {
+          status = 'RECHAZADO';
+        } else {
+          status = 'EN REVISIÓN';
+        }
+      }
+      
+      return {
+        status,
+        url,
+        observaciones: obs,
+      };
     }
-    
-    return {
-      status,
-      url,
-      observaciones: obs,
-    };
   }, [student, activeKey]);
 
   useEffect(() => {
@@ -336,7 +607,15 @@ function ReviewDocsModal({ student, isDarkMode, onClose, onUpdate }: ReviewDocsM
   const handleApprove = async () => {
     setIsSaving(true);
     try {
-      await dbService.updateStudentDocumentValidation(student.id, activeKey, true, "");
+      if (activeKey.startsWith('r1_') || activeKey.startsWith('r2_') || activeKey.startsWith('r3_')) {
+        const reportNo = parseInt(activeKey.substring(1, 2));
+        const subKey = activeKey.substring(3) as 'reporte_bimestral_doc' | 'evaluacion_cualitativa' | 'auto_evaluacion';
+        await dbService.validateBimestralDocument(student.id, reportNo, subKey, true, "");
+      } else if (activeKey === 'evaluacion_desempeno_final' || activeKey === 'formato_final' || activeKey === 'reporte_final') {
+        await dbService.validateCierreDocument(student.id, activeKey, true, "");
+      } else {
+        await dbService.updateStudentDocumentValidation(student.id, activeKey, true, "");
+      }
       onUpdate();
     } catch (err) {
       console.error(err);
@@ -352,7 +631,15 @@ function ReviewDocsModal({ student, isDarkMode, onClose, onUpdate }: ReviewDocsM
     }
     setIsSaving(true);
     try {
-      await dbService.updateStudentDocumentValidation(student.id, activeKey, false, obsText);
+      if (activeKey.startsWith('r1_') || activeKey.startsWith('r2_') || activeKey.startsWith('r3_')) {
+        const reportNo = parseInt(activeKey.substring(1, 2));
+        const subKey = activeKey.substring(3) as 'reporte_bimestral_doc' | 'evaluacion_cualitativa' | 'auto_evaluacion';
+        await dbService.validateBimestralDocument(student.id, reportNo, subKey, false, obsText);
+      } else if (activeKey === 'evaluacion_desempeno_final' || activeKey === 'formato_final' || activeKey === 'reporte_final') {
+        await dbService.validateCierreDocument(student.id, activeKey, false, obsText);
+      } else {
+        await dbService.updateStudentDocumentValidation(student.id, activeKey, false, obsText);
+      }
       onUpdate();
     } catch (err) {
       console.error(err);
@@ -361,10 +648,27 @@ function ReviewDocsModal({ student, isDarkMode, onClose, onUpdate }: ReviewDocsM
     }
   };
 
-  const docTitles = {
-    kardex: 'Kardex Académico',
-    carga_academica: 'Carga Académica',
-    vigencia_derechos: 'Vigencia de Derechos'
+  const getKeysForCategory = () => {
+    if (activeCategory === 'requisitos') {
+      return ['kardex', 'carga_academica', 'vigencia_derechos'];
+    }
+    if (activeCategory === 'apertura') {
+      return ['solicitud_servicio_social', 'carta_compromiso', 'carta_presentacion', 'carta_asignacion', 'plan_de_trabajo', 'tarjeta_control'];
+    }
+    if (activeCategory === 'r1') {
+      return ['r1_reporte_bimestral_doc', 'r1_evaluacion_cualitativa', 'r1_auto_evaluacion'];
+    }
+    if (activeCategory === 'r2') {
+      return ['r2_reporte_bimestral_doc', 'r2_evaluacion_cualitativa', 'r2_auto_evaluacion'];
+    }
+    return [
+      'r3_reporte_bimestral_doc',
+      'r3_evaluacion_cualitativa',
+      'r3_auto_evaluacion',
+      'evaluacion_desempeno_final',
+      'formato_final',
+      'reporte_final'
+    ];
   };
 
   return (
@@ -380,11 +684,11 @@ function ReviewDocsModal({ student, isDarkMode, onClose, onUpdate }: ReviewDocsM
         }`}>
           <div>
             <div className="flex items-center gap-2">
-              <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-brand-teal/10 text-brand-teal`}>
+              <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-brand-teal/10 text-brand-teal">
                 Expediente Digital
               </span>
               <span className="text-neutral-400">•</span>
-              <p className="text-xs font-mono text-neutral-400">{student.control}</p>
+              <p className="text-xs font-mono text-neutral-400">{student.control || student.id}</p>
             </div>
             <h3 className="text-2xl font-black tracking-tight mt-1">{student.name}</h3>
             <p className="text-xs text-neutral-400 font-bold uppercase tracking-wide mt-0.5">{student.career}</p>
@@ -402,19 +706,67 @@ function ReviewDocsModal({ student, isDarkMode, onClose, onUpdate }: ReviewDocsM
         {/* Inner Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-neutral-800/10 dark:divide-neutral-800">
           {/* Left Menu Selection & Validation Rules - 4cols */}
-          <div className="lg:col-span-4 p-6 space-y-6">
+          <div className="lg:col-span-4 p-6 space-y-6 max-h-[600px] overflow-y-auto">
+            {/* Category tabs */}
+            <div className="flex gap-1 p-1 bg-neutral-100 dark:bg-[#1a2333] rounded-2xl border border-neutral-200/50 dark:border-neutral-800">
+              {(['requisitos', 'apertura', 'r1', 'r2', 'r3'] as const).map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => {
+                    setActiveCategory(cat);
+                    const defaultKeys = {
+                      requisitos: 'kardex',
+                      apertura: 'solicitud_servicio_social',
+                      r1: 'r1_reporte_bimestral_doc',
+                      r2: 'r2_reporte_bimestral_doc',
+                      r3: 'r3_reporte_bimestral_doc'
+                    };
+                    setActiveKey(defaultKeys[cat]);
+                  }}
+                  className={`flex-1 text-center py-2 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all ${
+                    activeCategory === cat
+                      ? 'bg-brand-blue text-white shadow-sm'
+                      : 'text-neutral-500 hover:text-brand-blue dark:hover:text-white'
+                  }`}
+                >
+                  {cat === 'requisitos' ? 'Iniciales' : cat === 'apertura' ? 'Apertura' : cat === 'r1' ? 'R1' : cat === 'r2' ? 'R2' : 'R3'}
+                </button>
+              ))}
+            </div>
+
             <p className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Selecciona para revisar:</p>
             
             <div className="space-y-3">
-              {(['kardex', 'carga_academica', 'vigencia_derechos'] as const).map((key) => {
-                const itemDetails = student?.[key] || {};
-                const hasUrl = !!itemDetails.url_documento;
+              {getKeysForCategory().map((key) => {
+                let hasUrl = false;
+                let isApproved = false;
+                let obs = '';
+
+                if (key.startsWith('r1_') || key.startsWith('r2_') || key.startsWith('r3_')) {
+                  const rNo = parseInt(key.substring(1, 2));
+                  const sKey = key.substring(3);
+                  const r = student?.reportes_bimestrales?.find((rep: any) => rep.numero_reporte === rNo);
+                  const subD = r?.[sKey] || {};
+                  hasUrl = !!(subD.url_documento || subD.url_sellado);
+                  isApproved = subD.estado_validacion === true;
+                  obs = subD.observaciones || '';
+                } else if (key === 'evaluacion_desempeno_final' || key === 'formato_final' || key === 'reporte_final') {
+                  const docMap = student?.cierre_servicio?.[key] || {};
+                  hasUrl = !!(docMap.url_documento || docMap.url_sellado);
+                  isApproved = docMap.estado_validacion === true;
+                  obs = docMap.observaciones || '';
+                } else {
+                  const docMap = student?.[key] || {};
+                  hasUrl = !!docMap.url_documento;
+                  isApproved = docMap.estado_validacion === true;
+                  obs = docMap.observaciones || '';
+                }
+
                 const getStatusPill = () => {
                   if (!hasUrl) return <span className="text-[9px] font-black px-2 py-0.5 rounded bg-neutral-100 text-neutral-400 dark:bg-white/5 uppercase">No Subido</span>;
-                  if (itemDetails.estado_validacion === true) {
+                  if (isApproved) {
                     return <span className="text-[9px] font-black px-2 py-0.5 rounded bg-brand-teal/10 text-brand-teal uppercase">Aceptado</span>;
                   }
-                  const obs = itemDetails.observaciones || '';
                   if (obs.trim() !== '' && obs.trim() !== '""') {
                     return <span className="text-[9px] font-black px-2 py-0.5 rounded bg-rose-500/10 text-rose-500 uppercase">Rechazado</span>;
                   }
@@ -443,7 +795,7 @@ function ReviewDocsModal({ student, isDarkMode, onClose, onUpdate }: ReviewDocsM
                       </div>
                       <div className="truncate">
                         <p className={`text-[11px] font-black uppercase tracking-wider truncate ${activeKey === key ? 'text-brand-teal' : ''}`}>{docTitles[key]}</p>
-                        <p className="text-[9px] text-neutral-400 font-bold">Documento digital</p>
+                        <p className="text-[9px] text-neutral-400 font-bold">Expediente digital</p>
                       </div>
                     </div>
                     {getStatusPill()}
@@ -627,7 +979,7 @@ function ReviewDocsModal({ student, isDarkMode, onClose, onUpdate }: ReviewDocsM
               )}
             </div>
 
-            <div className={`mt-6 pt-6 border-t font-mono text-[8px] text-neutral-500 uppercase flex flex-wrap justify-between gap-4 border-neutral-800/10 dark:border-neutral-800`}>
+            <div className="mt-6 pt-6 border-t font-mono text-[8px] text-neutral-500 uppercase flex flex-wrap justify-between gap-4 border-neutral-800/10 dark:border-neutral-800">
               <span>Rastro de Depósito: Firestore Cloud Sync</span>
               <span>Modificado en tiempo real</span>
             </div>

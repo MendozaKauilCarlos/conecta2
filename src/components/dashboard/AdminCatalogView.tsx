@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, CheckCircle2, Loader2, RefreshCw, Building2 } from 'lucide-react';
+import { Plus, Edit, Eye, EyeOff, CheckCircle2, Loader2, RefreshCw, Building2 } from 'lucide-react';
 import { Dependency } from '../../types';
 import * as dbService from '../../services/dbService';
 import { NewDependencyModal } from './NewDependencyModal';
@@ -43,16 +43,21 @@ export function AdminCatalogView({ isDarkMode }: { isDarkMode?: boolean }) {
     }
   };
 
-  const handleDeleteDependency = async (id: string, name: string) => {
-    if (window.confirm(`¿Estás seguro de que deseas eliminar la dependencia "${name}" del catálogo?`)) {
+  const handleToggleHideDependency = async (dep: Dependency) => {
+    const isCurrentlyHidden = !!dep.oculta;
+    const actionWord = isCurrentlyHidden ? 'mostrar (hacer visible)' : 'ocultar (marcar convenio inactivo)';
+    if (window.confirm(`¿Deseas ${actionWord} la dependencia "${dep.name}"?`)) {
       try {
-        await dbService.deleteDependency(id);
-        setSuccessMessage('¡Dependencia eliminada exitosamente!');
+        await dbService.saveDependency({
+          ...dep,
+          oculta: !isCurrentlyHidden
+        });
+        setSuccessMessage(isCurrentlyHidden ? '¡Dependencia ahora es visible para los alumnos!' : '¡Dependencia oculta exitosamente!');
         setShowSuccess(true);
         setTimeout(() => setShowSuccess(false), 3000);
         await fetchDeps();
       } catch (err) {
-        console.error("Error deleting dependency:", err);
+        console.error("Error toggling dependency visibility:", err);
       }
     }
   };
@@ -143,11 +148,17 @@ export function AdminCatalogView({ isDarkMode }: { isDarkMode?: boolean }) {
                     <td className={`px-6 py-4 text-sm font-medium transition-colors duration-500 ${isDarkMode ? 'text-neutral-500' : 'text-neutral-500'}`}>{dep.category}</td>
                     <td className={`px-6 py-4 text-sm font-bold transition-colors duration-500 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-700'}`}>{dep.vacancies} / {dep.maxVacancies}</td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                        dep.vacancies > 0 ? 'bg-brand-teal/10 text-brand-teal' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400'
-                      }`}>
-                        {dep.vacancies > 0 ? dep.status || 'Disponible' : 'Sin Cupos'}
-                      </span>
+                      {dep.oculta ? (
+                        <span className="inline-flex items-center px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-brand-orange/10 text-brand-orange border border-brand-orange/20 animate-pulse">
+                          Oculta (Convenio Vencido)
+                        </span>
+                      ) : (
+                        <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                          dep.vacancies > 0 ? 'bg-brand-teal/10 text-brand-teal' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400'
+                        }`}>
+                          {dep.vacancies > 0 ? dep.status || 'Disponible' : 'Sin Cupos'}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -162,11 +173,15 @@ export function AdminCatalogView({ isDarkMode }: { isDarkMode?: boolean }) {
                           <Edit size={18} />
                         </button>
                         <button 
-                          onClick={() => handleDeleteDependency(dep.id, dep.name)}
-                          className={`p-2 rounded-lg transition-colors cursor-pointer ${isDarkMode ? 'text-neutral-600 hover:text-brand-orange hover:bg-brand-orange/10' : 'text-neutral-400 hover:text-rose-600 hover:bg-rose-50'}`}
-                          title="Eliminar dependencia"
+                          onClick={() => handleToggleHideDependency(dep)}
+                          className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                            dep.oculta 
+                              ? (isDarkMode ? 'text-brand-teal hover:bg-brand-teal/10' : 'text-emerald-600 hover:bg-emerald-50')
+                              : (isDarkMode ? 'text-neutral-600 hover:text-brand-orange hover:bg-brand-orange/10' : 'text-neutral-400 hover:text-amber-600 hover:bg-amber-50')
+                          }`}
+                          title={dep.oculta ? "Mostrar dependencia" : "Ocultar dependencia"}
                         >
-                          <Trash2 size={18} />
+                          {dep.oculta ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                       </div>
                     </td>

@@ -1,31 +1,53 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, type User } from 'firebase/auth';
-import { auth } from '../lib/firebase';
 
 interface FirebaseContextType {
-  user: User | null;
+  user: any;
   loading: boolean;
+  login: (userData: any) => void;
+  logout: () => void;
 }
 
-const FirebaseContext = createContext<FirebaseContextType>({ user: null, loading: true });
+const FirebaseContext = createContext<FirebaseContextType>({
+  user: null,
+  loading: true,
+  login: () => {},
+  logout: () => {}
+});
 
 export const useFirebase = () => useContext(FirebaseContext);
 
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    const stored = localStorage.getItem('vinculatec_current_user');
+    if (stored) {
+      try {
+        setUser(JSON.parse(stored));
+      } catch (e) {
+        console.error("Error parsing stored session: ", e);
+      }
+    }
+    setLoading(false);
   }, []);
 
+  const login = (userData: any) => {
+    const mappedUser = {
+      ...userData,
+      uid: userData.id || userData.uid || userData.controlNumber || 'student_id'
+    };
+    setUser(mappedUser);
+    localStorage.setItem('vinculatec_current_user', JSON.stringify(mappedUser));
+  };
+
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('vinculatec_current_user');
+  };
+
   return (
-    <FirebaseContext.Provider value={{ user, loading }}>
+    <FirebaseContext.Provider value={{ user, loading, login, logout }}>
       {children}
     </FirebaseContext.Provider>
   );

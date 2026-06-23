@@ -22,6 +22,8 @@ export function DependencyDetailsModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  const isChangeOfDependency = !!user.id_dependencia && user.id_dependencia !== dependency.id;
+
   const handleConfirm = async () => {
     setIsSubmitting(true);
     try {
@@ -50,10 +52,20 @@ export function DependencyDetailsModal({
           <div className="w-20 h-20 bg-brand-teal/10 rounded-[2rem] flex items-center justify-center mx-auto mb-8 border border-brand-teal/20">
             <CheckCircle2 className="text-brand-teal w-12 h-12" />
           </div>
-          <h3 className={`text-3xl font-black mb-4 tracking-tight transition-colors duration-500 ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>¡Solicitud Enviada!</h3>
+          <h3 className={`text-3xl font-black mb-4 tracking-tight transition-colors duration-500 ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>
+            {isChangeOfDependency ? '¡Cambio Solicitado!' : '¡Solicitud Enviada!'}
+          </h3>
           <p className={`font-medium leading-relaxed mb-10 transition-colors duration-500 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-            Tu solicitud para <span className="font-bold text-brand-teal">{dependency.name}</span> ha sido registrada con éxito. 
-            Pronto recibirás noticias en tu correo académico.
+            {isChangeOfDependency ? (
+              <>
+                Tu solicitud de cambio para <span className="font-bold text-brand-teal">{dependency.name}</span> ha sido procesada con éxito.
+              </>
+            ) : (
+              <>
+                Tu solicitud para <span className="font-bold text-brand-teal">{dependency.name}</span> ha sido registrada con éxito.
+              </>
+            )}
+            <br />Pronto recibirás noticias en tu correo académico.
           </p>
           <button 
             onClick={() => {
@@ -211,17 +223,13 @@ export function DependencyDetailsModal({
                   <span>Tu Selección Activa</span>
                 </div>
               ) : (user.id_dependencia) ? (
-                <div className="flex flex-col sm:items-end gap-1">
-                  <button 
-                    disabled
-                    className="px-8 py-5 bg-neutral-100 dark:bg-[#1a2333] border border-neutral-200 dark:border-neutral-800 text-neutral-400 dark:text-neutral-500 rounded-2xl font-black text-xs uppercase tracking-widest cursor-not-allowed"
-                  >
-                    Selección Bloqueada
-                  </button>
-                  <p className="text-[10px] font-bold text-brand-orange uppercase tracking-wider text-right">
-                    Ya registraste otra dependencia
-                  </p>
-                </div>
+                <button 
+                  onClick={() => setShowConfirmation(true)}
+                  className={`flex-1 sm:flex-none px-10 py-5 text-white font-black rounded-2xl transition-all active:scale-95 shadow-xl flex items-center justify-center gap-3 text-base group bg-amber-500 hover:bg-amber-600 shadow-amber-500/20`}
+                >
+                  <span>Solicitar Cambio</span>
+                  <AlertCircle size={24} className="group-hover:scale-110 transition-transform text-white" />
+                </button>
               ) : (
                 <button 
                   onClick={() => setShowConfirmation(true)}
@@ -251,13 +259,34 @@ export function DependencyDetailsModal({
               <div className="w-16 h-16 bg-brand-orange/10 rounded-2xl flex items-center justify-center mb-6">
                 <AlertCircle className="text-brand-orange w-8 h-8" />
               </div>
-              <h3 className={`text-3xl font-black mb-4 tracking-tighter text-balance transition-colors duration-500 ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>¿Confirmar selección?</h3>
-              <p className={`leading-relaxed mb-10 font-medium transition-colors duration-500 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                Estás por seleccionar <span className={`font-bold ${isDarkMode ? 'text-brand-teal' : 'text-brand-blue'}`}>{dependency.name}</span> como tu dependencia principal.
-                <br /><br />
-                <span className="text-brand-orange font-black uppercase text-[10px] tracking-widest block mb-2">Aviso Importante</span>
-                Puedes cambiar de dependencia más adelante, pero esto podría reiniciar tu conteo de horas acumuladas.
-              </p>
+              {isChangeOfDependency ? (
+                <>
+                  <h3 className={`text-2xl font-black mb-4 tracking-tighter text-balance transition-colors duration-500 ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>
+                    ¿Confirmar Cambio de Dependencia?
+                  </h3>
+                  <div className={`space-y-4 mb-10 font-medium text-sm transition-colors duration-500 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                    <p>
+                      Estás por solicitar el cambio a <span className={`font-bold ${isDarkMode ? 'text-brand-teal' : 'text-brand-blue'}`}>{dependency.name}</span>.
+                    </p>
+                    <div className="p-5 rounded-2xl border bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400">
+                      <p className="font-black text-xs uppercase tracking-widest mb-1">¡Aviso Importante!</p>
+                      <p className="text-xs leading-normal">
+                        Al realizar este cambio de dependencia <strong>perderás tus horas acumuladas</strong> y habrá un <strong>retraso considerable</strong> en la liberación de tu servicio social.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className={`text-3xl font-black mb-4 tracking-tighter text-balance transition-colors duration-500 ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>¿Confirmar selección?</h3>
+                  <p className={`leading-relaxed mb-10 font-medium transition-colors duration-500 ${isDarkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                    Estás por seleccionar <span className={`font-bold ${isDarkMode ? 'text-brand-teal' : 'text-brand-blue'}`}>{dependency.name}</span> como tu dependencia principal.
+                    <br /><br />
+                    <span className="text-brand-orange font-black uppercase text-[10px] tracking-widest block mb-2">Aviso Importante</span>
+                    Puedes cambiar de dependencia más adelante, pero esto podría reiniciar tu conteo de horas acumuladas.
+                  </p>
+                </>
+              )}
               
               <div className="flex flex-col sm:flex-row gap-4">
                 <button 

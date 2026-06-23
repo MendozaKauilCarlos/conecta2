@@ -363,8 +363,11 @@ export function FormServiceRequest({
                       isDarkMode ? 'bg-[#0a0f18] border-neutral-800 text-white' : 'bg-neutral-50 border-neutral-100 text-brand-blue'
                     }`}
                   >
+                    <option value="ENERO - JUNIO 2026">ENERO - JUNIO 2026</option>
                     <option value="AGOSTO - DICIEMBRE 2026">AGOSTO - DICIEMBRE 2026</option>
                     <option value="ENERO - JUNIO 2027">ENERO - JUNIO 2027</option>
+                    <option value="AGOSTO - DICIEMBRE 2027">AGOSTO - DICIEMBRE 2027</option>
+                    <option value="ENERO - JUNIO 2028">ENERO - JUNIO 2028</option>
                   </select>
                 </div>
               </div>

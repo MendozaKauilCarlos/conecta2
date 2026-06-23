@@ -49,10 +49,11 @@ export function CatalogView({
 
   const filteredDependencies = useMemo(() => {
     return dependencies.filter(d => {
+      const isNotHidden = !d.oculta;
       const matchesFilter = filter === 'Todos' || d.category === filter;
       const matchesSearch = d.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                            d.subCategory.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesFilter && matchesSearch;
+      return isNotHidden && matchesFilter && matchesSearch;
     });
   }, [dependencies, filter, searchQuery]);
 

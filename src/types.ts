@@ -44,6 +44,7 @@ export interface Dependency {
   maxVacancies: number;
   status: 'Alta Disponibilidad' | 'Lugares Limitados' | 'Disponible' | 'Últimos Lugares' | 'Pocos Lugares' | 'Disponibilidad Media';
   image: string;
+  oculta?: boolean;
   objective?: string;
   activities?: string[];
   contact?: {

@@ -1,12 +1,10 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Menu, Loader2, LogOut, Info, User, Building2, FileEdit, FileCheck } from 'lucide-react';
+import { X, Menu, Loader2, LogOut, Info, User, Building2, FileEdit, FileCheck, History } from 'lucide-react';
 import { Logo, ThemeToggle } from '../Common';
 import { UserData, Dependency } from '../../types';
 import { useFirebase } from '../FirebaseProvider';
-import { signOut } from 'firebase/auth';
-import { auth as firebaseAuth } from '../../lib/firebase';
 
 interface NavItemProps {
   icon: React.ReactNode;
@@ -72,11 +70,11 @@ export function Sidebar({
   dataConfirmed: boolean,
   selectedDependency: Dependency | null
 }) {
-  const { user: firebaseUser, loading: firebaseLoading } = useFirebase();
+  const { logout } = useFirebase();
 
   const handleFirebaseLogout = async () => {
     try {
-      await signOut(firebaseAuth);
+      await logout();
       onLogout();
     } catch (err) {
       console.error("Logout error:", err);
@@ -144,6 +142,13 @@ export function Sidebar({
                     label="Revisión de Expedientes" 
                     active={activeTab === 'AdminReviews'} 
                     onClick={() => onTabChange('AdminReviews')}
+                    isDarkMode={isDarkMode}
+                  />
+                  <NavItem 
+                    icon={<History size={20} />} 
+                    label="Historial de Periodos" 
+                    active={activeTab === 'AdminHistory'} 
+                    onClick={() => onTabChange('AdminHistory')}
                     isDarkMode={isDarkMode}
                   />
                 </>

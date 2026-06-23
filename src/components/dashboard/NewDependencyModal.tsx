@@ -142,19 +142,9 @@ export function NewDependencyModal({ onClose, onSave, isDarkMode, dependency }: 
                 )}
               </div>
               <div className="flex-1 space-y-4 w-full">
-                <div className="flex flex-col md:flex-row gap-4 items-end">
-                  <div className="flex-1 space-y-2 w-full">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-500 ml-1">URL de la Imagen / Logo</label>
-                    <input 
-                      type="text"
-                      value={formData.image}
-                      onChange={(e) => setFormData({...formData, image: e.target.value})}
-                      placeholder="https://ejemplo.com/logo.png o súbelo..."
-                      className={`w-full px-6 py-4 rounded-xl border-2 outline-none transition-all focus:border-brand-teal font-bold text-xs ${isDarkMode ? 'bg-[#0a0f18] border-neutral-800 text-white' : 'bg-white border-neutral-150 text-brand-blue'}`}
-                    />
-                  </div>
-                  <div className="w-full md:w-auto shrink-0">
-                    <label className={`w-full md:w-auto text-center px-6 py-4 rounded-xl font-black text-xs transition-all cursor-pointer shadow-md flex items-center justify-center gap-2 border-2 ${
+                <div className="flex flex-col sm:flex-row gap-4 items-center">
+                  <div className="w-full sm:w-auto shrink-0">
+                    <label className={`w-full sm:w-auto text-center px-8 py-5 rounded-2xl font-black text-xs transition-all cursor-pointer shadow-md flex items-center justify-center gap-2 border-2 ${
                       isUploading 
                         ? 'bg-neutral-500 cursor-not-allowed border-transparent text-white' 
                         : 'bg-brand-teal text-white border-transparent hover:brightness-110 active:scale-95'
@@ -167,7 +157,7 @@ export function NewDependencyModal({ onClose, onSave, isDarkMode, dependency }: 
                       ) : (
                         <>
                           <Upload size={16} />
-                          <span>Subir Imagen</span>
+                          <span>Subir Imagen / Logo</span>
                         </>
                       )}
                       <input 
@@ -179,6 +169,11 @@ export function NewDependencyModal({ onClose, onSave, isDarkMode, dependency }: 
                       />
                     </label>
                   </div>
+                  {formData.image && (
+                    <span className="text-xs font-bold text-brand-teal bg-brand-teal/5 px-4 py-2 rounded-xl border border-brand-teal/10">
+                      ✓ Imagen cargada con éxito
+                    </span>
+                  )}
                 </div>
                 <p className="text-[10px] font-bold text-neutral-500">Formato cuadrado PNG, JPG o SVG con fondo transparente o blanco preferentemente.</p>
               </div>

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { motion } from 'motion/react';
-import { ChevronRight, FileEdit, Upload, FileText, Search, Download, ArrowLeft, Lightbulb, X, Clock, Calendar, Loader2, ExternalLink } from 'lucide-react';
+import { ChevronRight, FileEdit, Upload, FileText, Search, Download, ArrowLeft, Lightbulb, X, Clock, Calendar, Loader2, ExternalLink, MapPin } from 'lucide-react';
 import { UserData } from '../../types';
 import { FormServiceRequest } from './FormServiceRequest';
 import * as dbService from '../../services/dbService';
@@ -32,6 +32,7 @@ export function DocumentDetailView({
     if (t.includes('vigencia')) return 'vigencia_derechos';
     if (t.includes('solicitud') || t.includes('anexo 17')) return 'solicitud_servicio_social';
     if (t.includes('compromiso')) return 'carta_compromiso';
+    if (t.includes('presentación') || t.includes('presentacion')) return 'carta_presentacion';
     if (t.includes('asignacion') || t.includes('asignación')) return 'carta_asignacion';
     if (t.includes('plan de trabajo')) return 'plan_de_trabajo';
     if (t.includes('tarjeta')) return 'tarjeta_control';
@@ -76,6 +77,13 @@ export function DocumentDetailView({
       };
     }
 
+    if (t.includes('presentación') || t.includes('presentacion')) {
+      return {
+        fileName: 'carta_presentacion_recibido.pdf',
+        tip: 'Tip: Sube el acuse escaneado o fotografía legible de tu Carta de Presentación firmada y sellada de recibido por tu dependencia.',
+      };
+    }
+
     if (t.includes('asignacion') || t.includes('asignación')) {
       return {
         fileName: 'carta_asignacion.pdf',
@@ -105,9 +113,11 @@ export function DocumentDetailView({
 
   const config = getDocConfig();
   const title = doc.title.toLowerCase();
-  const isGenerateType = ['10', '11', '12', '13', '14'].includes(doc.id) || 
+  const isGenerateType = ['10', '11', '12', '13', '14', '15'].includes(doc.id) || 
                          title.includes('solicitud') || 
                          title.includes('compromiso') || 
+                         title.includes('presentación') || 
+                         title.includes('presentacion') || 
                          title.includes('asignacion') || 
                          title.includes('asignación') || 
                          title.includes('plan de trabajo') || 
@@ -124,6 +134,9 @@ export function DocumentDetailView({
     if (t.includes('compromiso')) {
       return dbStudentData?.carta_compromiso?.url_plantilla || 
              'https://firebasestorage.googleapis.com/v0/b/vinculatec-e7656.firebasestorage.app/o/Documentos%2FApertura%2FCARTA%20COMPROMISO%20SERV.%20SOCIAL_V.0%20.pdf?alt=media&token=c168f7bc-8413-4e61-8777-db1da12cf62c';
+    }
+    if (t.includes('presentación') || t.includes('presentacion')) {
+      return '';
     }
     if (t.includes('asignacion') || t.includes('asignación')) {
       return dbStudentData?.carta_asignacion?.url_plantilla || 
@@ -158,11 +171,18 @@ export function DocumentDetailView({
         desc2: 'Firma la carta compromiso con tinta azul, escanea el documento completo en formato PDF y súbelo aquí.'
       };
     }
+    if (t.includes('presentación') || t.includes('presentacion')) {
+      return {
+        title: 'Trámite Presencial',
+        desc1: 'Acude presencialmente al Departamento de Servicio Social del Tecnológico para recoger tu Carta de Presentación oficial impresa, firmada y sellada.',
+        desc2: 'Entrega la Carta de Presentación a tu Dependencia Receptora. Escanea el acuse de recibido (copia firmada/sellada de recibido por la dependencia) y cárgalo aquí.'
+      };
+    }
     if (t.includes('asignacion') || t.includes('asignación')) {
       return {
         title: 'Descargar Carta Asignación',
-        desc1: 'Descarga tu Carta de Asignación oficial, que formaliza el inicio de tu servicio social en tu dependencia asignada.',
-        desc2: 'Recaba la firma del titular del programa, fírmala tú también, sella el documento, escanéalo en PDF y súbelo aquí.'
+        desc1: 'Descarga tu Carta de Asignación oficial, que formaliza tu vinculación activa y de aceptación con la dependencia receptora asignada.',
+        desc2: 'Recaba la firma del titular del programa en tu dependencia, fírmala tú también, sella el documento, escanéalo en PDF y súbelo aquí.'
       };
     }
     if (t.includes('plan de trabajo')) {
@@ -1092,7 +1112,7 @@ export function DocumentDetailView({
                         </div>
                         <div className="space-y-1.5">
                           <h4 className={`text-xs font-black uppercase tracking-wide ${isDarkMode ? 'text-white' : 'text-brand-blue'}`}>
-                            Descargar Formato
+                            {title.includes('presentación') || title.includes('presentacion') ? 'Recoger Físicamente' : 'Descargar Formato'}
                           </h4>
                           <p className={`text-[11px] ${isDarkMode ? 'text-neutral-400' : 'text-neutral-600'} leading-relaxed`}>
                             {stepConfig.desc1}
@@ -1101,19 +1121,26 @@ export function DocumentDetailView({
                       </div>
 
                       <div className="pt-6">
-                        <button 
-                          onClick={() => {
-                            if (plantillaUrl) {
-                              window.open(plantillaUrl, '_blank');
-                            } else {
-                              handlePrint(true);
-                            }
-                          }}
-                          className="w-full px-4 py-3 rounded-2xl font-black text-xs uppercase tracking-widest bg-[#005691] text-white shadow-xl shadow-brand-blue/20 hover:bg-[#005691]/90 transition-all flex items-center justify-center gap-2 active:scale-95"
-                        >
-                          <Download size={14} />
-                          <span>{stepConfig.title}</span>
-                        </button>
+                        {title.includes('presentación') || title.includes('presentacion') ? (
+                          <div className="w-full py-3 px-4 rounded-2xl font-black text-xs uppercase tracking-widest bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-center flex items-center justify-center gap-2">
+                            <MapPin size={14} className="animate-bounce" />
+                            <span>Trámite en Oficina</span>
+                          </div>
+                        ) : (
+                          <button 
+                            onClick={() => {
+                              if (plantillaUrl) {
+                                window.open(plantillaUrl, '_blank');
+                              } else {
+                                handlePrint(true);
+                              }
+                            }}
+                            className="w-full px-4 py-3 rounded-2xl font-black text-xs uppercase tracking-widest bg-[#005691] text-white shadow-xl shadow-brand-blue/20 hover:bg-[#005691]/90 transition-all flex items-center justify-center gap-2 active:scale-95"
+                          >
+                            <Download size={14} />
+                            <span>{stepConfig.title}</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 

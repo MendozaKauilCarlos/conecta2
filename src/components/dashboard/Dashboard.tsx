@@ -88,7 +88,9 @@ export function Dashboard({
         case 'AdminCatalog':
           return <AdminCatalogView isDarkMode={isDarkMode} />;
         case 'AdminReviews':
-          return <AdminReviewsView isDarkMode={isDarkMode} />;
+          return <AdminReviewsView mode="activo" isDarkMode={isDarkMode} />;
+        case 'AdminHistory':
+          return <AdminReviewsView mode="historial" isDarkMode={isDarkMode} />;
         default:
           return <AdminCatalogView isDarkMode={isDarkMode} />;
       }

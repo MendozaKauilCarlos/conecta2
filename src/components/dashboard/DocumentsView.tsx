@@ -4,8 +4,8 @@ import { motion } from 'motion/react';
 import { UserData } from '../../types';
 import { FileEdit, FileText, CheckCircle2, Clock, AlertCircle, PenLine, ShieldCheck, Eye, Upload } from 'lucide-react';
 import { DocumentDetailView } from './DocumentDetailView';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { BimestralReportDetailView } from './BimestralReportDetailView';
+import * as dbService from '../../services/dbService';
 
 interface DocumentCardProps {
   doc: {
@@ -164,6 +164,7 @@ function DocumentCard({ doc, isDarkMode, onClick }: DocumentCardProps) {
 
 export function DocumentsView({ user, isDarkMode }: { user: UserData, isDarkMode?: boolean }) {
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
+  const [activeTabSection, setActiveTabSection] = useState<'requisitos' | 'apertura' | 'r1' | 'r2' | 'r3'>('requisitos');
   const [dbStudentData, setDbStudentData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -173,14 +174,8 @@ export function DocumentsView({ user, isDarkMode }: { user: UserData, isDarkMode
       return;
     }
     
-    const docRef = doc(db, "alumnos_tecnologico", user.id);
-    const unsubscribe = onSnapshot(docRef, (snap) => {
-      if (snap.exists()) {
-        setDbStudentData(snap.data());
-      }
-      setLoading(false);
-    }, (error) => {
-      console.error("Error loading documents in realtime:", error);
+    const unsubscribe = dbService.subscribeToAlumno(user.id, (data) => {
+      setDbStudentData(data);
       setLoading(false);
     });
 
@@ -239,11 +234,53 @@ export function DocumentsView({ user, isDarkMode }: { user: UserData, isDarkMode
     };
   };
 
+  const getBimestralReportOverallStatus = (reportNo: number) => {
+    const report = dbStudentData?.reportes_bimestrales?.find((r: any) => r.numero_reporte === reportNo);
+    if (!report) return 'PENDIENTE';
+    
+    const subDocs = [
+      report.reporte_bimestral_doc,
+      report.evaluacion_cualitativa,
+      report.auto_evaluacion
+    ];
+    
+    const urls = subDocs.map(d => d?.url_documento || d?.url_sellado || '');
+    const validStates = subDocs.map(d => d?.estado_validacion === true);
+    const observations = subDocs.map(d => d?.observaciones || '');
+
+    const hasAnyUrl = urls.some(u => !!u);
+    const allApproved = urls.every(u => !!u) && validStates.every(v => v === true);
+    const hasAnyRejection = urls.some((u, idx) => !!u && !validStates[idx] && observations[idx]?.trim() !== '');
+
+    if (allApproved) return 'APROBADO';
+    if (hasAnyRejection) return 'RECHAZADO';
+    if (hasAnyUrl) return 'EN REVISIÓN';
+    return 'PENDIENTE';
+  };
+
+  const getBimestralReportLastModified = (reportNo: number) => {
+    const report = dbStudentData?.reportes_bimestrales?.find((r: any) => r.numero_reporte === reportNo);
+    if (!report) return null;
+    
+    const dates = [
+      report.reporte_bimestral_doc?.fecha_subida || report.reporte_bimestral_doc?.fecha_generacion,
+      report.evaluacion_cualitativa?.fecha_subida || report.evaluacion_cualitativa?.fecha_generacion,
+      report.auto_evaluacion?.fecha_subida || report.auto_evaluacion?.fecha_generacion
+    ].filter(Boolean).map(d => new Date(d).getTime());
+
+    if (dates.length === 0) return null;
+    const maxDate = new Date(Math.max(...dates));
+    const day = maxDate.getDate();
+    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    return `${day} ${months[maxDate.getMonth()]} ${maxDate.getFullYear()}`;
+  };
+
   const kardexDetails = getDocStatusAndDetails('kardex');
   const cargaDetails = getDocStatusAndDetails('carga_academica');
   const vigenciaDetails = getDocStatusAndDetails('vigencia_derechos');
   const anexo17Details = getDocStatusAndDetails('solicitud_servicio_social');
   const compromisoDetails = getDocStatusAndDetails('carta_compromiso');
+  const presentacionDetails = getDocStatusAndDetails('carta_presentacion');
   const asignacionDetails = getDocStatusAndDetails('carta_asignacion');
   const planTrabajoDetails = getDocStatusAndDetails('plan_de_trabajo');
   const tarjetaControlDetails = getDocStatusAndDetails('tarjeta_control');
@@ -271,6 +308,15 @@ export function DocumentsView({ user, isDarkMode }: { user: UserData, isDarkMode
       lastModified: compromisoDetails.lastModified,
       url: compromisoDetails.url,
       observaciones: compromisoDetails.observaciones,
+    },
+    {
+      id: '15',
+      title: 'Carta de Presentación',
+      description: 'Oficio emitido por el Tecnológico que te presenta físicamente ante tu dependencia receptora.',
+      status: presentacionDetails.status,
+      lastModified: presentacionDetails.lastModified,
+      url: presentacionDetails.url,
+      observaciones: presentacionDetails.observaciones,
     },
     {
       id: '12',
@@ -352,23 +398,151 @@ export function DocumentsView({ user, isDarkMode }: { user: UserData, isDarkMode
             Gestiona tu expediente de servicio social y realiza el seguimiento de tus trámites en tiempo real.
           </p>
         </div>
+
+        {/* Dynamic Section Tabs */}
+        <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-neutral-100 dark:bg-[#1a2333] border border-neutral-200/50 dark:border-neutral-800 rounded-[2rem] w-full lg:w-auto">
+          <button
+            onClick={() => setActiveTabSection('requisitos')}
+            className={`px-6 py-3.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+              activeTabSection === 'requisitos'
+                ? 'bg-brand-blue text-white shadow-md'
+                : 'text-neutral-500 hover:text-brand-blue dark:hover:text-white'
+            }`}
+          >
+            Requisitos Iniciales
+          </button>
+          <button
+            onClick={() => setActiveTabSection('apertura')}
+            className={`px-6 py-3.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+              activeTabSection === 'apertura'
+                ? 'bg-brand-blue text-white shadow-md'
+                : 'text-neutral-500 hover:text-brand-blue dark:hover:text-white'
+            }`}
+          >
+            Apertura
+          </button>
+          <button
+            onClick={() => setActiveTabSection('r1')}
+            className={`px-6 py-3.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+              activeTabSection === 'r1'
+                ? 'bg-brand-blue text-white shadow-md'
+                : 'text-neutral-500 hover:text-brand-blue dark:hover:text-white'
+            }`}
+          >
+            Reporte 1
+          </button>
+          <button
+            onClick={() => setActiveTabSection('r2')}
+            className={`px-6 py-3.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+              activeTabSection === 'r2'
+                ? 'bg-brand-blue text-white shadow-md'
+                : 'text-neutral-500 hover:text-brand-blue dark:hover:text-white'
+            }`}
+          >
+            Reporte 2
+          </button>
+          <button
+            onClick={() => setActiveTabSection('r3')}
+            className={`px-6 py-3.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+              activeTabSection === 'r3'
+                ? 'bg-brand-blue text-white shadow-md'
+                : 'text-neutral-500 hover:text-brand-blue dark:hover:text-white'
+            }`}
+          >
+            Reporte 3
+          </button>
+        </div>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center p-12">
           <span className="text-sm font-bold text-neutral-400">Cargando expediente...</span>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 sm:gap-10">
-          {documents.map((doc) => (
-            <DocumentCard 
-              key={doc.id}
-              doc={doc} 
-              isDarkMode={isDarkMode} 
-              onClick={() => setSelectedDoc(doc)}
-            />
-          ))}
+      ) : activeTabSection === 'requisitos' ? (
+        <div className="space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-brand-teal/10 text-brand-teal shrink-0">
+              <ShieldCheck size={20} />
+            </div>
+            <div>
+              <h3 className={`text-xl font-black tracking-tight ${isDarkMode ? 'text-neutral-150' : 'text-brand-blue'}`}>
+                Requisitos Iniciales
+              </h3>
+              <p className="text-xs font-medium text-neutral-500">
+                Documentación académica y de afiliación obligatoria para ser elegible en el programa.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 sm:gap-10">
+            {documents
+              .filter((doc) => ['7', '8', '9'].includes(doc.id))
+              .map((doc) => (
+                <DocumentCard 
+                  key={doc.id}
+                  doc={doc} 
+                  isDarkMode={isDarkMode} 
+                  onClick={() => setSelectedDoc(doc)}
+                />
+              ))}
+          </div>
         </div>
+      ) : activeTabSection === 'apertura' ? (
+        <div className="space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-brand-orange/10 text-brand-orange shrink-0">
+              <FileEdit size={20} />
+            </div>
+            <div>
+              <h3 className={`text-xl font-black tracking-tight ${isDarkMode ? 'text-neutral-150' : 'text-brand-blue'}`}>
+                Documentos de Apertura
+              </h3>
+              <p className="text-xs font-medium text-neutral-500">
+                Formatos de inicio oficiales para formalizar y registrar tu servicio social en la dependencia.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 sm:gap-10">
+            {documents
+              .filter((doc) => ['10', '11', '15', '12', '13', '14'].includes(doc.id))
+              .map((doc) => (
+                <DocumentCard 
+                  key={doc.id}
+                  doc={doc} 
+                  isDarkMode={isDarkMode} 
+                  onClick={() => setSelectedDoc(doc)}
+                />
+              ))}
+          </div>
+        </div>
+      ) : activeTabSection === 'r1' ? (
+        <BimestralReportDetailView
+          reportNo={1}
+          user={user}
+          dbStudentData={dbStudentData}
+          onBack={() => setActiveTabSection('requisitos')}
+          isDarkMode={isDarkMode}
+          hideHeader={true}
+        />
+      ) : activeTabSection === 'r2' ? (
+        <BimestralReportDetailView
+          reportNo={2}
+          user={user}
+          dbStudentData={dbStudentData}
+          onBack={() => setActiveTabSection('requisitos')}
+          isDarkMode={isDarkMode}
+          hideHeader={true}
+        />
+      ) : (
+        <BimestralReportDetailView
+          reportNo={3}
+          user={user}
+          dbStudentData={dbStudentData}
+          onBack={() => setActiveTabSection('requisitos')}
+          isDarkMode={isDarkMode}
+          hideHeader={true}
+        />
       )}
     </div>
   );
